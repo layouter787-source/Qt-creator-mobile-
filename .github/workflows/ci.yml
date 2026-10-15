@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build and test
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          gradle :project-model:test :build-engine:test assembleDebug --console=plain --continue 2>&1 | tee build.log
+
+      - name: Publish result to issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const ok = '${{ steps.build.outcome }}' === 'success';
+            let log = '';
+            try { log = fs.readFileSync('build.log', 'utf8'); } catch (e) { log = '(sem log)'; }
+            const lines = log.split('\n');
+            const important = lines
+              .filter(l => /^e: |error:|FAILED|Exception|What went wrong|Could not|Unresolved/.test(l))
+              .slice(0, 80);
+            const tail = lines.slice(-60);
+            const runUrl = context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId;
+            let body = '## CI automatico\n\n' +
+              'Commit: `' + context.sha.slice(0, 7) + '` - ' + (ok ? 'SUCESSO' : 'FALHOU') + '\n' +
+              'Execucao: ' + runUrl + '\n\n';
+            if (!ok) {
+              body += '### Erros principais\n```\n' + important.join('\n') + '\n```\n\n' +
+                '### Final do log\n```\n' + tail.join('\n') + '\n```\n';
+            }
+            body = body.slice(0, 60000);
+            const title = 'CI: resultado do ultimo build';
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100,
+            });
+            const existing = issues.find(i => i.title === title && !i.pull_request);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo, title, body,
+              });
+            }
+
+      - name: Upload APK
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-creator-mobile-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Fail the job if the build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
