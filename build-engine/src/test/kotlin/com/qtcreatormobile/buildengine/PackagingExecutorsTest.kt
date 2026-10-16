@@ -9,14 +9,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-private class FakeProcessRunner(private val result: ProcessResult) : ProcessRunner {
-    var lastCommand: List<String>? = null
-    override fun run(command: List<String>, workingDir: File): ProcessResult {
-        lastCommand = command
-        return result
-    }
-}
-
 class Aapt2LinkExecutorTest {
     @Test
     fun `runs aapt2 link and reports success`() {

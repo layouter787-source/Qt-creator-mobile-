@@ -17,6 +17,7 @@ import com.qtcreatormobile.buildengine.TermuxToolchainInstaller
 import com.qtcreatormobile.buildengine.ToolchainInstaller
 import com.qtcreatormobile.buildengine.ToolchainLayout
 import com.qtcreatormobile.buildengine.ToolchainStage
+import com.qtcreatormobile.buildengine.ToolchainStageListener
 import com.qtcreatormobile.projectmodel.Language
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,7 +43,7 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val states: Map<Language, MutableStateFlow<ToolchainUiState>> =
         listOf(Language.CPP, Language.KOTLIN).associateWith { language ->
-            MutableStateFlow(
+            MutableStateFlow<ToolchainUiState>(
                 if (isFullyInstalled(language)) ToolchainUiState.Installed else ToolchainUiState.NotInstalled
             )
         }
@@ -180,7 +181,7 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
         binaryPath: String,
         installRoot: File,
         stateFlow: MutableStateFlow<ToolchainUiState>,
-        stageListener: (ToolchainStage) -> Unit,
+        stageListener: ToolchainStageListener,
         installerFactory: () -> ToolchainInstaller,
     ) {
         stateFlow.value = ToolchainUiState.Downloading(0f)
@@ -193,7 +194,10 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun optionalStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>): (ToolchainStage) -> Unit = { stage ->
+    // Os listeners sao `fun interface` do Kotlin: um valor de tipo funcao `(X) -> Unit` NAO e
+    // convertido automaticamente para eles (so lambdas literais sao), entao construimos o
+    // ToolchainStageListener explicitamente.
+    private fun optionalStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>) = ToolchainStageListener { stage ->
         when (stage) {
             ToolchainStage.EXTRACTING -> stateFlow.value = ToolchainUiState.Extracting
             ToolchainStage.INTEGRATING -> stateFlow.value = ToolchainUiState.Integrating
@@ -203,7 +207,7 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /** Igual ao listener opcional, mas NUNCA marca `Installed` sozinho - usado nos passos intermediarios do setup obrigatorio. */
-    private fun intermediateStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>): (ToolchainStage) -> Unit = { stage ->
+    private fun intermediateStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>) = ToolchainStageListener { stage ->
         when (stage) {
             ToolchainStage.EXTRACTING -> stateFlow.value = ToolchainUiState.Extracting
             ToolchainStage.INTEGRATING -> stateFlow.value = ToolchainUiState.Integrating

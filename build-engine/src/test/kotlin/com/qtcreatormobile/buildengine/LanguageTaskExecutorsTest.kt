@@ -6,14 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-private class FakeProcessRunner(private val result: ProcessResult) : ProcessRunner {
-    var lastCommand: List<String>? = null
-    override fun run(command: List<String>, workingDir: File): ProcessResult {
-        lastCommand = command
-        return result
-    }
-}
-
 private class FakeEnvironmentProcessRunner(private val result: ProcessResult) : EnvironmentProcessRunner {
     var lastCommand: List<String>? = null
     var lastEnv: Map<String, String>? = null

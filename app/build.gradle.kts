@@ -30,6 +30,21 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // Varias bibliotecas do build-engine (commons-compress, xz, json, snakeyaml) trazem os
+    // mesmos arquivos de licenca em META-INF; sem excluir, o AGP falha com "2 files found
+    // with path 'META-INF/...'" ao juntar os recursos Java.
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "META-INF/DEPENDENCIES",
+                "META-INF/*.md",
+                "META-INF/versions/**",
+            )
+        }
+    }
 }
 
 dependencies {
