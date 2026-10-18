@@ -25,6 +25,10 @@ class TermuxToolchainInstaller(
 ) : ToolchainInstaller {
 
     override fun install(installRootDir: File) {
+        // O instalador precisa funcionar sozinho, sem depender de quem o chamou ter criado a
+        // pasta (os .deb sao baixados para dentro dela antes de qualquer extracao).
+        installRootDir.mkdirs()
+
         stageListener.onStageChanged(ToolchainStage.DOWNLOADING)
         val closure = indexResolver.resolveDependencyClosure(repoBaseUrl, rootPackage)
 

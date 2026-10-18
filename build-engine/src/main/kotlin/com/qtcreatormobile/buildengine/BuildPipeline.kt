@@ -2,6 +2,7 @@ package com.qtcreatormobile.buildengine
 
 import com.qtcreatormobile.projectmodel.Target
 import java.io.File
+import java.io.IOException
 
 /** Resultado de uma etapa individual do pipeline, para diagnostico claro de onde algo falhou. */
 data class PipelineStepResult(
@@ -30,9 +31,15 @@ class BuildPipeline(
     private val apkSigner: ApkSigner,
 ) {
 
-    fun build(target: Target, manifestPath: String, outputApkPath: String): BuildPipelineResult {
+    /** @param buildDir pasta dos artefatos intermediarios (ver [BuildPlanner.plan]). */
+    fun build(
+        target: Target,
+        manifestPath: String,
+        outputApkPath: String,
+        buildDir: String = "build",
+    ): BuildPipelineResult {
         val steps = mutableListOf<PipelineStepResult>()
-        val graph = BuildPlanner.plan(target)
+        val graph = BuildPlanner.plan(target, buildDir)
 
         // 1) Compilar cada arquivo fonte com o executor da linguagem correspondente.
         for (compileTask in graph.compileTasks) {
@@ -70,7 +77,9 @@ class BuildPipeline(
         steps += PipelineStepResult("aapt2-link:${target.id}", linkResult.succeeded, linkResult.log)
         if (!linkResult.succeeded) return BuildPipelineResult(steps, null)
 
-        // 5) Injetar .so/.dex compilados dentro do APK base.
+        // 5) Injetar .so/.dex compilados dentro do APK base. Qualquer erro de arquivo (um .so
+        //    que o linker disse ter gerado mas nao existe, disco cheio, etc.) vira uma etapa
+        //    que FALHOU, em vez de derrubar o pipeline com uma excecao.
         val extraEntries = buildMap {
             linkedSoPath?.let { put("lib/arm64-v8a/lib${target.id}.so", it) }
             dexPath?.let { put("classes.dex", it) }
@@ -81,6 +90,9 @@ class BuildPipeline(
                 steps += PipelineStepResult("assemble:${target.id}", true, "Entradas adicionadas: ${extraEntries.keys}")
             } catch (e: BuildEngineException) {
                 steps += PipelineStepResult("assemble:${target.id}", false, e.message ?: "Falha ao montar o APK.")
+                return BuildPipelineResult(steps, null)
+            } catch (e: IOException) {
+                steps += PipelineStepResult("assemble:${target.id}", false, "Erro de arquivo ao montar o APK: ${e.message}")
                 return BuildPipelineResult(steps, null)
             }
         }

@@ -6,6 +6,7 @@ import com.qtcreatormobile.projectmodel.TargetSources
 import java.io.File
 import java.nio.file.Files
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -24,8 +25,18 @@ private class FailingTaskExecutor(private val failingSourcePath: String) : TaskE
         else TaskResult(task.id, true, "ok")
 }
 
-private class AlwaysSucceedsLinkExecutor : LinkExecutor {
-    override fun execute(linkTask: LinkTask, graph: TaskGraph) = TaskResult(linkTask.id, true, "linked")
+/** Cria o .so de verdade no disco, como o linker real faria (o pipeline le esse arquivo depois). */
+private class WritingLinkExecutor : LinkExecutor {
+    override fun execute(linkTask: LinkTask, graph: TaskGraph): TaskResult {
+        File(linkTask.outputPath).parentFile?.mkdirs()
+        File(linkTask.outputPath).writeText("fake shared library bytes")
+        return TaskResult(linkTask.id, true, "linked")
+    }
+}
+
+/** Linker que diz ter dado certo mas NAO produz o arquivo - o pipeline precisa reportar isso, nao estourar. */
+private class LyingLinkExecutor : LinkExecutor {
+    override fun execute(linkTask: LinkTask, graph: TaskGraph) = TaskResult(linkTask.id, true, "linked (mentira)")
 }
 
 /** Fake que cria um .apk (zip) real e vazio, como se o aapt2 tivesse rodado de verdade. */
@@ -75,18 +86,20 @@ class BuildPipelineTest {
         entryPoint = EntryPoint.KOTLIN_WRAPPER,
     )
 
+    private fun buildDir() = File(tempDir, "build").absolutePath
+
     @Test
-    fun `runs every step and produces a signed apk when everything succeeds`() {
+    fun `runs every step and produces a signed apk containing the so and dex`() {
         val pipeline = BuildPipeline(
             taskExecutor = AlwaysSucceedsTaskExecutor(),
-            linkExecutor = AlwaysSucceedsLinkExecutor(),
+            linkExecutor = WritingLinkExecutor(),
             dexer = AlwaysSucceedsDexer(),
             aapt2Linker = FakeAapt2Linker(),
             apkSigner = AlwaysSucceedsApkSigner(),
         )
 
-        val outputApk = File(tempDir, "app.apk").absolutePath
-        val result = pipeline.build(target, "AndroidManifest.xml", outputApk)
+        val outputApk = File(tempDir, "out/app.apk").absolutePath
+        val result = pipeline.build(target, "AndroidManifest.xml", outputApk, buildDir())
 
         assertTrue(result.succeeded)
         assertEquals(outputApk, result.outputApkPath)
@@ -94,25 +107,53 @@ class BuildPipelineTest {
         assertTrue(result.steps.any { it.stepName.startsWith("compile:") })
         assertTrue(result.steps.any { it.stepName.startsWith("link:") })
         assertTrue(result.steps.any { it.stepName.startsWith("dex:") })
+        assertTrue(result.steps.any { it.stepName.startsWith("assemble:") })
         assertTrue(result.steps.any { it.stepName.startsWith("sign:") })
+
+        // O APK final tem de conter de verdade o manifesto, o .so e o classes.dex.
+        ZipFile(outputApk).use { zip ->
+            assertTrue(zip.getEntry("AndroidManifest.xml") != null)
+            assertTrue(zip.getEntry("lib/arm64-v8a/libapp.so") != null)
+            assertTrue(zip.getEntry("classes.dex") != null)
+        }
     }
 
     @Test
     fun `stops immediately when a compile task fails, never reaching later steps`() {
         val pipeline = BuildPipeline(
             taskExecutor = FailingTaskExecutor(failingSourcePath = "src/main.cpp"),
-            linkExecutor = AlwaysSucceedsLinkExecutor(),
+            linkExecutor = WritingLinkExecutor(),
             dexer = AlwaysSucceedsDexer(),
             aapt2Linker = FakeAapt2Linker(),
             apkSigner = AlwaysSucceedsApkSigner(),
         )
 
-        val outputApk = File(tempDir, "app.apk").absolutePath
-        val result = pipeline.build(target, "AndroidManifest.xml", outputApk)
+        val outputApk = File(tempDir, "out/app.apk").absolutePath
+        val result = pipeline.build(target, "AndroidManifest.xml", outputApk, buildDir())
 
         assertFalse(result.succeeded)
         assertEquals(null, result.outputApkPath)
         assertFalse(result.steps.any { it.stepName.startsWith("sign:") })
         assertFalse(File(outputApk).exists())
+    }
+
+    @Test
+    fun `reports a failed assemble step instead of crashing when the linked so is missing`() {
+        val pipeline = BuildPipeline(
+            taskExecutor = AlwaysSucceedsTaskExecutor(),
+            linkExecutor = LyingLinkExecutor(),
+            dexer = AlwaysSucceedsDexer(),
+            aapt2Linker = FakeAapt2Linker(),
+            apkSigner = AlwaysSucceedsApkSigner(),
+        )
+
+        val outputApk = File(tempDir, "out/app.apk").absolutePath
+        val result = pipeline.build(target, "AndroidManifest.xml", outputApk, buildDir())
+
+        assertFalse(result.succeeded)
+        assertEquals(null, result.outputApkPath)
+        val assemble = result.steps.first { it.stepName.startsWith("assemble:") }
+        assertFalse(assemble.succeeded)
+        assertFalse(result.steps.any { it.stepName.startsWith("sign:") })
     }
 }

@@ -14,6 +14,7 @@ class ElfPrefixPatcherTest {
 
     private val oldPrefix = "/data/data/com.termux/files/usr" // 31 caracteres
     private val newPrefix = "/data/data/com.qtcm/files/usr"    // 29 caracteres
+    private val paddedPrefix = "/data/data/com.qtcm/files///usr" // 29 + 2 barras extras = 31
     private val chunk = 1 shl 20
 
     private lateinit var tempDir: File
@@ -33,7 +34,7 @@ class ElfPrefixPatcherTest {
         val padded = ElfPrefixPatcher.padToLength(oldPrefix, newPrefix)
 
         assertEquals(oldPrefix.length, padded.length)
-        assertEquals("/data/data/com.qtcm/files//usr", padded)
+        assertEquals(paddedPrefix, padded)
         assertFalse(padded.contains('\u0000'))
     }
 
@@ -53,8 +54,8 @@ class ElfPrefixPatcherTest {
         assertEquals(2, occurrences)
         assertEquals(originalSize, file.length())
         val text = file.readBytes().toString(Charsets.ISO_8859_1)
-        assertTrue(text.contains("/data/data/com.qtcm/files//usr/lib/libc++_shared.so\u0000"))
-        assertTrue(text.contains("/data/data/com.qtcm/files//usr/etc/clang.cfg\u0000"))
+        assertTrue(text.contains("$paddedPrefix/lib/libc++_shared.so\u0000"))
+        assertTrue(text.contains("$paddedPrefix/etc/clang.cfg\u0000"))
         assertFalse(text.contains("com.termux"))
     }
 

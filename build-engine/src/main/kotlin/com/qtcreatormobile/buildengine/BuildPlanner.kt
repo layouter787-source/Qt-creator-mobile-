@@ -63,10 +63,14 @@ class BuildEngineException(message: String) : Exception(message)
  * Converte um [Target] do project-model num [TaskGraph] executavel: uma
  * CompileTask por arquivo fonte e uma LinkTask final por target. Dependencias
  * entre arquivos (analise de #include/import) ficam para uma fase futura.
+ *
+ * @param buildDir pasta onde ficam todos os artefatos intermediarios e finais.
+ *   Parametro (em vez de fixo) para o chamador escolher - no app, uma pasta do
+ *   projeto; nos testes, uma pasta temporaria.
  */
 object BuildPlanner {
 
-    fun plan(target: Target): TaskGraph {
+    fun plan(target: Target, buildDir: String = "build"): TaskGraph {
         val compileTasks = mutableListOf<CompileTask>()
 
         target.sources.cpp.forEach { src ->
@@ -74,7 +78,7 @@ object BuildPlanner {
                 id = "compile:${target.id}:$src",
                 language = Language.CPP,
                 sourcePath = src,
-                outputPath = objectFileFor(target.id, src),
+                outputPath = objectFileFor(buildDir, target.id, src),
             )
         }
         target.sources.kotlin.forEach { src ->
@@ -82,7 +86,7 @@ object BuildPlanner {
                 id = "compile:${target.id}:$src",
                 language = Language.KOTLIN,
                 sourcePath = src,
-                outputPath = classFileFor(target.id, src),
+                outputPath = classFileFor(buildDir, target.id, src),
             )
         }
         target.sources.java.forEach { src ->
@@ -90,7 +94,7 @@ object BuildPlanner {
                 id = "compile:${target.id}:$src",
                 language = Language.JAVA,
                 sourcePath = src,
-                outputPath = classFileFor(target.id, src),
+                outputPath = classFileFor(buildDir, target.id, src),
             )
         }
 
@@ -98,15 +102,16 @@ object BuildPlanner {
             id = "link:${target.id}",
             targetId = target.id,
             inputTaskIds = compileTasks.map { it.id }.toSet(),
-            outputPath = "build/${target.id}/output",
+            // Um .so de verdade, com nome de biblioteca (antes era um arquivo chamado so "output").
+            outputPath = "$buildDir/${target.id}/lib/lib${target.id}.so",
         )
 
         return TaskGraph(compileTasks = compileTasks, linkTasks = listOf(linkTask))
     }
 
-    private fun objectFileFor(targetId: String, source: String): String =
-        "build/$targetId/obj/${source.substringAfterLast('/').substringBeforeLast('.')}.o"
+    private fun objectFileFor(buildDir: String, targetId: String, source: String): String =
+        "$buildDir/$targetId/obj/${source.substringAfterLast('/').substringBeforeLast('.')}.o"
 
-    private fun classFileFor(targetId: String, source: String): String =
-        "build/$targetId/classes/${source.substringAfterLast('/').substringBeforeLast('.')}.class"
+    private fun classFileFor(buildDir: String, targetId: String, source: String): String =
+        "$buildDir/$targetId/classes/${source.substringAfterLast('/').substringBeforeLast('.')}.class"
 }
