@@ -4,11 +4,16 @@ plugins {
 }
 
 android {
+    // O codigo continua nos pacotes com.qtcreatormobile.app.*; so o applicationId e curto.
     namespace = "com.qtcreatormobile.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.qtcreatormobile.app"
+        // IMPORTANTE: precisa ter NO MAXIMO 10 caracteres. Os binarios do clang (Termux) tem
+        // o caminho "/data/data/com.termux/files/usr" (31 caracteres) gravado dentro deles, e so
+        // podem ser corrigidos para um caminho que caiba nesse espaco:
+        // "/data/data/<applicationId>/files/usr" = 21 + tamanho do id <= 31. Ver docs/PREFIX_ALIAS.md.
+        applicationId = "com.qtcm"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

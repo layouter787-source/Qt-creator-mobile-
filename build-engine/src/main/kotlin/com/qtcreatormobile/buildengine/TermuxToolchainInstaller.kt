@@ -1,6 +1,7 @@
 package com.qtcreatormobile.buildengine
 
 import java.io.File
+import java.nio.file.Files
 
 /** Constantes reais do layout de instalacao do Termux, usadas para o patch de prefixo. */
 object TermuxConstants {
@@ -9,22 +10,56 @@ object TermuxConstants {
 }
 
 /**
+ * Cria (ou substitui) o link simbolico curto que faz o caminho gravado nos
+ * binarios ([TermuxToolchainInstaller.prefixAlias]) apontar para a pasta real
+ * onde o `usr` do Termux foi extraido.
+ */
+object PrefixAliasLinker {
+    fun link(alias: File, target: File) {
+        alias.parentFile?.mkdirs()
+        // Se ja houver um link (de uma instalacao anterior), remove so o link, nao o alvo.
+        Files.deleteIfExists(alias.toPath())
+        Files.createSymbolicLink(alias.toPath(), target.toPath())
+    }
+}
+
+/**
  * [ToolchainInstaller] real para C/C++: resolve a arvore de dependencias
  * COMPLETA do `clang` no repositorio do Termux (nao so o pacote `clang` -
  * ele depende de `libllvm`, `libc++`, etc.), baixa e extrai cada `.deb`, corrige
  * links simbolicos e o prefixo `/data/data/com.termux/files/usr` gravado nos
- * binarios/bibliotecas para o diretorio real do nosso app.
+ * binarios/bibliotecas.
+ *
+ * O prefixo e trocado no proprio arquivo por um caminho de EXATAMENTE o mesmo
+ * tamanho (ver [ElfPrefixPatcher]), entao o caminho novo precisa ter no maximo
+ * 31 caracteres. O caminho real do app no aparelho tem ~60, por isso se usa um
+ * ALIAS curto ([prefixAlias], ex.: `/data/data/com.qtcm/files/usr`) que e um link
+ * simbolico para a pasta real. Isso exige um nome de pacote (applicationId)
+ * curto, de ate 10 caracteres.
+ *
+ * @param prefixAlias caminho que sera gravado nos binarios. Se nulo, usa o proprio
+ *   `<installRootDir>/usr` (so funciona se esse caminho for curto o bastante - tipico de testes).
+ * @param linkAlias quando true e [prefixAlias] foi informado, cria o link simbolico
+ *   alias -> `<installRootDir>/usr`.
  */
 class TermuxToolchainInstaller(
     private val rootPackage: String = "clang",
     private val repoBaseUrl: String = TermuxConstants.REPO_BASE_URL,
     private val indexResolver: TermuxPackageIndexResolver = TermuxPackageIndexResolver(),
     private val downloader: Downloader = HttpDownloader(),
+    private val prefixAlias: String? = null,
+    private val linkAlias: Boolean = true,
     private val progressListener: DownloadProgressListener = DownloadProgressListener {},
     private val stageListener: ToolchainStageListener = ToolchainStageListener {},
 ) : ToolchainInstaller {
 
     override fun install(installRootDir: File) {
+        val usrDir = File(installRootDir, "usr")
+        val patchPrefix = prefixAlias ?: usrDir.absolutePath
+
+        // Valida ANTES de baixar qualquer coisa: falhar depois de centenas de MB seria um desperdicio.
+        requirePrefixFits(patchPrefix)
+
         // O instalador precisa funcionar sozinho, sem depender de quem o chamou ter criado a
         // pasta (os .deb sao baixados para dentro dela antes de qualquer extracao).
         installRootDir.mkdirs()
@@ -32,7 +67,7 @@ class TermuxToolchainInstaller(
         stageListener.onStageChanged(ToolchainStage.DOWNLOADING)
         val closure = indexResolver.resolveDependencyClosure(repoBaseUrl, rootPackage)
 
-        val usrDir = File(installRootDir, "usr")
+        // Alvos absolutos de links simbolicos apontam para o diretorio REAL (qualquer tamanho serve).
         val symlinkRewrite = TermuxConstants.PREFIX to usrDir.absolutePath
 
         val totalPackages = closure.packages.size
@@ -50,21 +85,31 @@ class TermuxToolchainInstaller(
             }
         }
 
-        stageListener.onStageChanged(ToolchainStage.EXTRACTING)
-        patchAllBinaries(installRootDir)
-    }
-
-    /** O prefixo Termux pode aparecer em qualquer binario/biblioteca extraida (`usr/bin` e `usr/lib`). */
-    private fun patchAllBinaries(installRootDir: File) {
-        val newPrefix = File(installRootDir, "usr").absolutePath
-        require(newPrefix.length <= TermuxConstants.PREFIX.length) {
-            "O caminho de instalacao do app ('$newPrefix') e mais longo que o prefixo do Termux " +
-                "('${TermuxConstants.PREFIX}') - o patch de binario nao e seguro nesse caso."
+        if (prefixAlias != null && linkAlias) {
+            PrefixAliasLinker.link(File(prefixAlias), usrDir)
         }
 
-        listOf(File(installRootDir, "usr/bin"), File(installRootDir, "usr/lib"))
+        stageListener.onStageChanged(ToolchainStage.EXTRACTING)
+        patchAllBinaries(installRootDir, patchPrefix)
+    }
+
+    private fun requirePrefixFits(patchPrefix: String) {
+        if (patchPrefix.length > TermuxConstants.PREFIX.length) {
+            throw BuildEngineException(
+                "O caminho de instalacao ('$patchPrefix', ${patchPrefix.length} caracteres) nao cabe no espaco do " +
+                    "prefixo do Termux (${TermuxConstants.PREFIX.length} caracteres) - o patch de binario so e seguro " +
+                    "se o caminho novo couber. Use um nome de pacote (applicationId) curto, de ate 10 caracteres, " +
+                    "e instale em /data/data/<pacote>/files/usr."
+            )
+        }
+    }
+
+    /** O prefixo pode aparecer em binarios, bibliotecas e arquivos de configuracao do clang. */
+    private fun patchAllBinaries(installRootDir: File, patchPrefix: String) {
+        listOf("usr/bin", "usr/lib", "usr/libexec", "usr/etc")
+            .map { File(installRootDir, it) }
             .filter { it.exists() }
-            .flatMap { it.walkTopDown().filter { f -> f.isFile && !java.nio.file.Files.isSymbolicLink(f.toPath()) } }
-            .forEach { file -> ElfPrefixPatcher.patch(file, TermuxConstants.PREFIX, newPrefix) }
+            .flatMap { it.walkTopDown().filter { f -> f.isFile && !Files.isSymbolicLink(f.toPath()) } }
+            .forEach { file -> ElfPrefixPatcher.patch(file, TermuxConstants.PREFIX, patchPrefix) }
     }
 }
