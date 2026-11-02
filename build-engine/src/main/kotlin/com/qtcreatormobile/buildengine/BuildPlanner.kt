@@ -73,6 +73,14 @@ object BuildPlanner {
     fun plan(target: Target, buildDir: String = "build"): TaskGraph {
         val compileTasks = mutableListOf<CompileTask>()
 
+        target.sources.c.forEach { src ->
+            compileTasks += CompileTask(
+                id = "compile:${target.id}:$src",
+                language = Language.C,
+                sourcePath = src,
+                outputPath = objectFileFor(buildDir, target.id, src),
+            )
+        }
         target.sources.cpp.forEach { src ->
             compileTasks += CompileTask(
                 id = "compile:${target.id}:$src",
@@ -109,8 +117,11 @@ object BuildPlanner {
         return TaskGraph(compileTasks = compileTasks, linkTasks = listOf(linkTask))
     }
 
+    private fun outputStem(source: String): String =
+        "${source.substringAfterLast('/').substringBeforeLast('.')}-${source.hashCode().toUInt().toString(16)}"
+
     private fun objectFileFor(buildDir: String, targetId: String, source: String): String =
-        "$buildDir/$targetId/obj/${source.substringAfterLast('/').substringBeforeLast('.')}.o"
+        "$buildDir/$targetId/obj/${outputStem(source)}.o"
 
     private fun classFileFor(buildDir: String, targetId: String, source: String): String =
         "$buildDir/$targetId/classes/${source.substringAfterLast('/').substringBeforeLast('.')}.class"

@@ -1,6 +1,8 @@
 package com.qtcreatormobile.buildengine
 
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 data class ProcessResult(
     val exitCode: Int,
@@ -35,12 +37,20 @@ class RealProcessRunner : EnvironmentProcessRunner {
         val builder = ProcessBuilder(command).directory(workingDir)
         builder.environment().putAll(env)
         val process = builder.start()
-
-        val stdout = process.inputStream.bufferedReader().readText()
-        val stderr = process.errorStream.bufferedReader().readText()
-        val exitCode = process.waitFor()
-
-        return ProcessResult(exitCode = exitCode, stdout = stdout, stderr = stderr)
+        val readers = Executors.newFixedThreadPool(2)
+        try {
+            // Drain both pipes concurrently so a noisy compiler cannot block on a full stderr/stdout pipe.
+            val stdoutFuture = readers.submit<String> { process.inputStream.bufferedReader().use { it.readText() } }
+            val stderrFuture = readers.submit<String> { process.errorStream.bufferedReader().use { it.readText() } }
+            if (!process.waitFor(15, TimeUnit.MINUTES)) {
+                process.destroyForcibly()
+                throw IllegalStateException("Processo excedeu o limite de 15 minutos: ${command.firstOrNull() ?: "comando"}")
+            }
+            return ProcessResult(process.exitValue(), stdoutFuture.get(), stderrFuture.get())
+        } finally {
+            readers.shutdownNow()
+            if (process.isAlive) process.destroyForcibly()
+        }
     }
 }
 

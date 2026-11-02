@@ -1,15 +1,22 @@
 package com.qtcreatormobile.app.toolchain
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qtcreatormobile.buildengine.AndroidRepositoryResolver
 import com.qtcreatormobile.buildengine.CachingToolchainProvisioner
+import com.qtcreatormobile.buildengine.DownloadControl
+import com.qtcreatormobile.buildengine.DownloadPausedException
 import com.qtcreatormobile.buildengine.DownloadProgressListener
 import com.qtcreatormobile.buildengine.FilteredZipExtractor
 import com.qtcreatormobile.buildengine.HttpDownloader
 import com.qtcreatormobile.buildengine.JdkInstaller
 import com.qtcreatormobile.buildengine.KotlinInstaller
+import com.qtcreatormobile.buildengine.MavenArtifactDownloader
 import com.qtcreatormobile.buildengine.PackagingLayout
 import com.qtcreatormobile.buildengine.PackagingToolsInstaller
 import com.qtcreatormobile.buildengine.RemoteToolchainInstaller
@@ -20,35 +27,48 @@ import com.qtcreatormobile.buildengine.ToolchainStage
 import com.qtcreatormobile.buildengine.ToolchainStageListener
 import com.qtcreatormobile.projectmodel.Language
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
-/**
- * Coordena o download+instalacao de TUDO que qualquer build precisa: o
- * toolchain de cada linguagem (C/C++, Java, Kotlin - este ultimo com suporte
- * COMPLETO a Jetpack Compose + Material3) e as ferramentas de packaging
- * (aapt2, d8.jar, apksigner.jar, android.jar) e o JDK.
- *
- * Do ponto de vista do usuario, cada setup - por mais downloads internos que
- * tenha - e UM UNICO passo silencioso: so a barra de progresso avancando ate
- * `Installed`, nunca uma lista de downloads ou pergunta tecnica.
- */
 class ToolchainViewModel(application: Application) : AndroidViewModel(application) {
-
     private val toolchainRoot = File(application.filesDir, "toolchain")
     private val packagingDir = File(toolchainRoot, PackagingLayout.SUBDIR)
+    private val downloadControl = DownloadControl()
+    private val downloader = HttpDownloader(downloadControl)
+    private val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    private val pausePreferences = application.getSharedPreferences("toolchain-downloads", Application.MODE_PRIVATE)
+    private val autoPauseReasons = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var manuallyPaused = pausePreferences.getBoolean("manual_pause", false)
+    @Volatile private var activeLanguage: Language? = null
+    @Volatile private var activeJob: kotlinx.coroutines.Job? = null
+    private val lastFractions = ConcurrentHashMap<Language, Float>().apply {
+        put(Language.CPP, 0f)
+        put(Language.KOTLIN, 0f)
+    }
 
     private val states: Map<Language, MutableStateFlow<ToolchainUiState>> =
         listOf(Language.CPP, Language.KOTLIN).associateWith { language ->
-            MutableStateFlow<ToolchainUiState>(
-                if (isFullyInstalled(language)) ToolchainUiState.Installed else ToolchainUiState.NotInstalled
-            )
+            MutableStateFlow<ToolchainUiState>(if (isFullyInstalled(language)) ToolchainUiState.Installed else ToolchainUiState.NotInstalled)
         }
 
-    /** Estado observavel do toolchain de [language]. C e CPP compartilham o mesmo estado. */
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { refreshNetworkPause() }
+        override fun onLost(network: Network) { refreshNetworkPause() }
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { refreshNetworkPause() }
+    }
+
+    init {
+        val request = NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build()
+        runCatching { connectivity.registerNetworkCallback(request, networkCallback) }
+        refreshNetworkPause()
+    }
+
     fun state(language: Language): StateFlow<ToolchainUiState> =
         states.getValue(if (language == Language.C) Language.CPP else language).asStateFlow()
 
@@ -57,7 +77,6 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     private fun isFullyInstalled(language: Language): Boolean {
         if (!mainBinaryFile(language).exists()) return false
         return when (language) {
-            // Java faz parte do setup obrigatorio (JDK), junto com C/C++ e packaging.
             Language.CPP, Language.C -> sysrootMarkerFile().exists() && isPackagingInstalled() && isJdkInstalled()
             Language.KOTLIN -> File(installRootDir(Language.KOTLIN), "compose-libs/material3-1.4.0.jar").exists()
             Language.JAVA -> true
@@ -71,20 +90,11 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
             File(packagingDir, PackagingLayout.ANDROID_JAR).exists()
 
     private fun isJdkInstalled(): Boolean = mainBinaryFile(Language.JAVA).exists()
-
-    private fun installRootDir(language: Language): File =
-        File(toolchainRoot, ToolchainLayout.subdirFor(language))
-
-    private fun mainBinaryFile(language: Language): File =
-        File(installRootDir(language), ToolchainLayout.mainBinaryNameFor(language))
-
-    private fun sysrootMarkerFile(): File =
-        File(installRootDir(Language.CPP), "sysroot/usr/include/stdio.h")
-
-    /** Caminho absoluto do JDK instalado - necessario como `JAVA_HOME` para rodar `kotlinc`. */
+    private fun installRootDir(language: Language): File = File(toolchainRoot, ToolchainLayout.subdirFor(language))
+    private fun mainBinaryFile(language: Language): File = File(installRootDir(language), ToolchainLayout.mainBinaryNameFor(language))
+    private fun sysrootMarkerFile(): File = File(installRootDir(Language.CPP), "sysroot/usr/include/stdio.h")
     fun jdkHome(): String = installRootDir(Language.JAVA).absolutePath
 
-    /** Jars de Compose/Material3 + stdlib, prontos para o `-classpath` de qualquer compilacao Kotlin. */
     fun kotlinClasspathJars(): List<String> =
         File(installRootDir(Language.KOTLIN), "compose-libs")
             .listFiles { f -> f.extension == "jar" && !f.name.startsWith("kotlin-compose-compiler-plugin") }
@@ -95,123 +105,183 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
             .listFiles { f -> f.name.startsWith("kotlin-compose-compiler-plugin") }
             ?.firstOrNull()?.absolutePath
 
-    /**
-     * Dispara o setup completo e obrigatorio: clang + dependencias + sysroot
-     * (C/C++, a linguagem de identidade do produto) MAIS o JDK e as ferramentas
-     * de packaging (necessarios para gerar um APK de qualquer projeto).
-     * Tudo como uma unica sequencia silenciosa.
-     */
     fun startCppSetup() {
-        val stateFlow = states.getValue(Language.CPP)
-        if (stateFlow.value is ToolchainUiState.Downloading) return
-        stateFlow.value = ToolchainUiState.Downloading(0f)
-
-        val progressListener = progressListenerFor(stateFlow)
-        val stageListener = intermediateStageListenerFor(stateFlow)
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                runStep(
-                    binaryPath = mainBinaryFile(Language.CPP).absolutePath,
-                    installRoot = installRootDir(Language.CPP),
-                    stateFlow = stateFlow, stageListener = stageListener,
-                ) { TermuxToolchainInstaller(downloader = HttpDownloader(), progressListener = progressListener, stageListener = stageListener) }
-
-                runStep(
-                    binaryPath = sysrootMarkerFile().absolutePath,
-                    installRoot = installRootDir(Language.CPP),
-                    stateFlow = stateFlow, stageListener = stageListener,
-                ) {
-                    RemoteToolchainInstaller(
-                        downloadUrl = AndroidRepositoryResolver().resolveLatestNdkLinuxUrl(),
-                        downloader = HttpDownloader(),
-                        extractor = FilteredZipExtractor.ndkSysrootOnly(),
-                        progressListener = progressListener,
-                        stageListener = stageListener,
-                    )
-                }
-
-                runStep(
-                    binaryPath = mainBinaryFile(Language.JAVA).absolutePath,
-                    installRoot = installRootDir(Language.JAVA),
-                    stateFlow = stateFlow, stageListener = stageListener,
-                ) { JdkInstaller(downloader = HttpDownloader(), progressListener = progressListener, stageListener = stageListener) }
-
-                runStep(
-                    binaryPath = File(packagingDir, PackagingLayout.ANDROID_JAR).absolutePath,
-                    installRoot = packagingDir,
-                    stateFlow = stateFlow, stageListener = stageListener,
-                ) { PackagingToolsInstaller(downloader = HttpDownloader(), progressListener = progressListener, stageListener = stageListener) }
-
-                stateFlow.value = ToolchainUiState.Installed
-            } catch (e: Exception) {
-                stateFlow.value = ToolchainUiState.Failed(e.message ?: "Falha desconhecida ao preparar o ambiente.")
+        if (states.getValue(Language.CPP).value is ToolchainUiState.Downloading || activeJob?.isActive == true) return
+        launchSetup(Language.CPP) { stateFlow, progress, stages ->
+            val prefixAlias = "/data/data/${getApplication<Application>().packageName}/files/usr"
+            runStep(mainBinaryFile(Language.CPP), installRootDir(Language.CPP), stateFlow, stages) {
+                TermuxToolchainInstaller(downloader = downloader, prefixAlias = prefixAlias, progressListener = progress, stageListener = stages)
+            }
+            runStep(sysrootMarkerFile(), installRootDir(Language.CPP), stateFlow, stages) {
+                RemoteToolchainInstaller(
+                    downloadUrl = AndroidRepositoryResolver().resolveLatestNdkLinuxUrl(), downloader = downloader,
+                    extractor = FilteredZipExtractor.ndkSysrootOnly(), progressListener = progress, stageListener = stages,
+                )
+            }
+            runStep(mainBinaryFile(Language.JAVA), installRootDir(Language.JAVA), stateFlow, stages) {
+                JdkInstaller(downloader = downloader, progressListener = progress, stageListener = stages)
+            }
+            runStep(File(packagingDir, PackagingLayout.ANDROID_JAR), packagingDir, stateFlow, stages) {
+                PackagingToolsInstaller(downloader = downloader, progressListener = progress, stageListener = stages)
             }
         }
     }
 
-    /**
-     * Dispara o setup completo do Kotlin - opcional, so quando o usuario aceita
-     * no popup: `kotlinc` + suporte COMPLETO a Jetpack Compose e Material3
-     * (plugin compilador + todas as bibliotecas). Um unico download grande,
-     * mas ainda um unico passo silencioso.
-     */
     fun startKotlinSetup() {
-        val stateFlow = states.getValue(Language.KOTLIN)
-        if (stateFlow.value is ToolchainUiState.Downloading) return
-        stateFlow.value = ToolchainUiState.Downloading(0f)
+        if (states.getValue(Language.KOTLIN).value is ToolchainUiState.Downloading || activeJob?.isActive == true) return
+        launchSetup(Language.KOTLIN) { stateFlow, progress, stages ->
+            val installer = KotlinInstaller(
+                downloader = downloader,
+                mavenDownloader = MavenArtifactDownloader(downloader),
+                progressListener = progress,
+                stageListener = stages,
+            )
+            CachingToolchainProvisioner(mainBinaryFile(Language.KOTLIN).absolutePath, installRootDir(Language.KOTLIN), installer, stages).ensureAvailable()
+        }
+    }
 
-        val installRoot = installRootDir(Language.KOTLIN)
-        val binaryPath = mainBinaryFile(Language.KOTLIN).absolutePath
-        val progressListener = progressListenerFor(stateFlow)
-        val stageListener = optionalStageListenerFor(stateFlow)
+    fun toggleManualPause() {
+        manuallyPaused = !manuallyPaused
+        pausePreferences.edit().putBoolean("manual_pause", manuallyPaused).apply()
+        syncPauseState()
+        if (!isPaused() && activeJob?.isActive != true) resumeSetup()
+    }
 
-        viewModelScope.launch(Dispatchers.IO) {
+    fun pauseForBackground() {
+        autoPauseReasons += "background"
+        syncPauseState()
+    }
+
+    fun resumeFromBackground() {
+        autoPauseReasons -= "background"
+        syncPauseState()
+        if (!isPaused() && activeJob?.isActive != true) resumeSetup()
+    }
+
+    private fun refreshNetworkPause() {
+        val network = connectivity.activeNetwork
+        val capabilities = network?.let(connectivity::getNetworkCapabilities)
+        val hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        if (hasInternet) autoPauseReasons -= "network" else autoPauseReasons += "network"
+        syncPauseState()
+        if (hasInternet && !isPaused() && activeJob?.isActive != true) resumeSetup()
+    }
+
+    private fun isPaused() = manuallyPaused || autoPauseReasons.isNotEmpty()
+
+    private fun syncPauseState() {
+        if (isPaused()) {
+            downloadControl.pause()
+            activeLanguage?.let { language ->
+                val message = pauseMessage()
+                states.getValue(language).value = ToolchainUiState.Paused(lastFractions[language] ?: 0f, message)
+                ToolchainDownloadService.paused(getApplication(), message)
+            }
+        } else {
+            downloadControl.resume()
+        }
+    }
+
+    private fun pauseMessage(): String = when {
+        manuallyPaused -> "Pausado por você"
+        "network" in autoPauseReasons -> "Aguardando conexão com a internet"
+        else -> "Pausado enquanto o app está em segundo plano"
+    }
+
+    private fun launchSetup(language: Language, work: suspend (MutableStateFlow<ToolchainUiState>, DownloadProgressListener, ToolchainStageListener) -> Unit) {
+        val stateFlow = states.getValue(language)
+        activeLanguage = language
+        lastFractions[language] = (stateFlow.value as? ToolchainUiState.Paused)?.fraction ?: lastFractions[language] ?: 0f
+        val progress = progressListenerFor(language, stateFlow)
+        val stages = intermediateStageListenerFor(stateFlow)
+        ToolchainDownloadService.start(getApplication())
+        activeJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val installer = KotlinInstaller(downloader = HttpDownloader(), progressListener = progressListener, stageListener = stageListener)
-                CachingToolchainProvisioner(binaryPath, installRoot, installer, stageListener).ensureAvailable()
+                while (true) {
+                    if (isPaused()) {
+                        stateFlow.value = ToolchainUiState.Paused(lastFractions[language] ?: 0f, pauseMessage())
+                        delay(400)
+                        continue
+                    }
+                    try {
+                        stateFlow.value = ToolchainUiState.Downloading(lastFractions[language] ?: 0f)
+                        work(stateFlow, progress, stages)
+                        while (isPaused()) {
+                            stateFlow.value = ToolchainUiState.Paused(lastFractions[language] ?: 0f, pauseMessage())
+                            delay(400)
+                        }
+                        stateFlow.value = ToolchainUiState.Installed
+                        lastFractions[language] = 1f
+                        ToolchainDownloadService.finish(getApplication(), success = true)
+                        break
+                    } catch (_: DownloadPausedException) {
+                        // O .part fica no disco; o loop retoma pela faixa HTTP na próxima tentativa.
+                    } catch (e: IOException) {
+                        if (isPaused()) {
+                            // Desconectar a requisição ao pausar pode gerar IOException em alguns servidores.
+                        } else if (!hasValidatedInternet()) {
+                            autoPauseReasons += "network"
+                            syncPauseState()
+                        } else throw e
+                    }
+                }
             } catch (e: Exception) {
-                stateFlow.value = ToolchainUiState.Failed(e.message ?: "Falha desconhecida ao baixar o Kotlin.")
+                val message = e.message ?: "Falha desconhecida ao preparar o ambiente."
+                stateFlow.value = ToolchainUiState.Failed(message)
+                ToolchainDownloadService.finish(getApplication(), success = false, message = message)
+            } finally {
+                activeJob = null
+                activeLanguage = null
             }
         }
     }
 
-    /** Roda uma etapa de instalacao, reiniciando a barra de progresso (0f) para ela. */
+    private fun resumeSetup() {
+        when (activeLanguage) {
+            Language.CPP -> startCppSetup()
+            Language.KOTLIN -> startKotlinSetup()
+            else -> if (states.getValue(Language.CPP).value !is ToolchainUiState.Installed) startCppSetup()
+        }
+    }
+
+    private fun hasValidatedInternet(): Boolean {
+        val network = connectivity.activeNetwork ?: return false
+        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     private fun runStep(
-        binaryPath: String,
+        expectedFile: File,
         installRoot: File,
         stateFlow: MutableStateFlow<ToolchainUiState>,
-        stageListener: ToolchainStageListener,
+        stages: ToolchainStageListener,
         installerFactory: () -> ToolchainInstaller,
     ) {
         stateFlow.value = ToolchainUiState.Downloading(0f)
-        CachingToolchainProvisioner(binaryPath, installRoot, installerFactory(), stageListener).ensureAvailable()
+        CachingToolchainProvisioner(expectedFile.absolutePath, installRoot, installerFactory(), stages).ensureAvailable()
     }
 
-    private fun progressListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>) = DownloadProgressListener { progress ->
+    private fun progressListenerFor(language: Language, stateFlow: MutableStateFlow<ToolchainUiState>) = DownloadProgressListener { progress ->
+        lastFractions[language] = progress.fraction.coerceIn(0f, 1f)
         if (stateFlow.value is ToolchainUiState.Downloading) {
-            stateFlow.value = ToolchainUiState.Downloading(progress.fraction)
+            stateFlow.value = ToolchainUiState.Downloading(lastFractions[language] ?: 0f)
+            ToolchainDownloadService.progress(getApplication(), lastFractions[language] ?: 0f)
         }
     }
 
-    // Os listeners sao `fun interface` do Kotlin: um valor de tipo funcao `(X) -> Unit` NAO e
-    // convertido automaticamente para eles (so lambdas literais sao), entao construimos o
-    // ToolchainStageListener explicitamente.
-    private fun optionalStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>) = ToolchainStageListener { stage ->
-        when (stage) {
-            ToolchainStage.EXTRACTING -> stateFlow.value = ToolchainUiState.Extracting
-            ToolchainStage.INTEGRATING -> stateFlow.value = ToolchainUiState.Integrating
-            ToolchainStage.DONE -> stateFlow.value = ToolchainUiState.Installed
-            else -> Unit
-        }
-    }
-
-    /** Igual ao listener opcional, mas NUNCA marca `Installed` sozinho - usado nos passos intermediarios do setup obrigatorio. */
     private fun intermediateStageListenerFor(stateFlow: MutableStateFlow<ToolchainUiState>) = ToolchainStageListener { stage ->
         when (stage) {
             ToolchainStage.EXTRACTING -> stateFlow.value = ToolchainUiState.Extracting
             ToolchainStage.INTEGRATING -> stateFlow.value = ToolchainUiState.Integrating
             else -> Unit
         }
+    }
+
+    override fun onCleared() {
+        runCatching { connectivity.unregisterNetworkCallback(networkCallback) }
+        downloadControl.pause()
+        super.onCleared()
     }
 }

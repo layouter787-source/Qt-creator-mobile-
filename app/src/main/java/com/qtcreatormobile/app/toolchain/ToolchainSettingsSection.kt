@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 fun ToolchainSettingsSection(
     state: ToolchainUiState,
     onDownloadClick: () -> Unit,
+    onPauseClick: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Text("Ferramentas de compilacao")
@@ -35,6 +36,12 @@ fun ToolchainSettingsSection(
                     progress = { state.fraction },
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                Button(onClick = onPauseClick, modifier = Modifier.padding(top = 8.dp)) { Text("Pausar") }
+            }
+            is ToolchainUiState.Paused -> {
+                Text("${state.reason} ${(state.fraction * 100).toInt()}%")
+                LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                Button(onClick = onPauseClick, modifier = Modifier.padding(top = 8.dp)) { Text("Continuar") }
             }
             is ToolchainUiState.Extracting, is ToolchainUiState.Integrating -> {
                 Text("Instalando...")

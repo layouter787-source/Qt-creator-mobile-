@@ -55,6 +55,7 @@ object ProjectModelLoader {
         @Suppress("UNCHECKED_CAST")
         val sourcesRaw = raw["sources"] as? Map<String, Any?> ?: emptyMap()
         val sources = TargetSources(
+            c = sourcesRaw.stringList("c"),
             cpp = sourcesRaw.stringList("cpp"),
             kotlin = sourcesRaw.stringList("kotlin"),
             java = sourcesRaw.stringList("java"),

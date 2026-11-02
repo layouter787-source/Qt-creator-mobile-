@@ -36,6 +36,7 @@ data class NativeDependency(
 )
 
 data class TargetSources(
+    val c: List<String> = emptyList(),
     val cpp: List<String> = emptyList(),
     val kotlin: List<String> = emptyList(),
     val java: List<String> = emptyList(),
@@ -72,7 +73,7 @@ data class ProjectModel(
                     )
                 }
             }
-            if (target.sources.cpp.isEmpty() && target.sources.kotlin.isEmpty() && target.sources.java.isEmpty()) {
+            if (target.sources.c.isEmpty() && target.sources.cpp.isEmpty() && target.sources.kotlin.isEmpty() && target.sources.java.isEmpty()) {
                 throw ProjectModelException("Target '${target.id}' nao declara nenhum arquivo fonte.")
             }
         }

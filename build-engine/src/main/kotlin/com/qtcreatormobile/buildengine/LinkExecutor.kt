@@ -19,7 +19,7 @@ class CppLinkExecutor(
 
     override fun execute(linkTask: LinkTask, graph: TaskGraph): TaskResult {
         val objectFiles = graph.compileTasks
-            .filter { it.id in linkTask.inputTaskIds }
+            .filter { it.id in linkTask.inputTaskIds && (it.language == com.qtcreatormobile.projectmodel.Language.C || it.language == com.qtcreatormobile.projectmodel.Language.CPP) }
             .map { it.outputPath }
 
         if (objectFiles.isEmpty()) {

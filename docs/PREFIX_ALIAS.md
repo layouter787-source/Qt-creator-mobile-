@@ -19,7 +19,9 @@ O caminho real do app tem ~60 caracteres
 
 Um **link simbolico curto**: gravamos nos binarios
 `/data/data/<applicationId>/files/usr`, e esse caminho e um link simbolico para a
-pasta real (`PrefixAliasLinker`). Para caber:
+pasta real (`PrefixAliasLinker`). `ToolchainViewModel` passa esse alias ao
+`TermuxToolchainInstaller`; o alvo real continua em `files/toolchain/cpp/usr`.
+Para caber:
 
     "/data/data/" (11) + applicationId + "/files/usr" (10) <= 31
     => applicationId com no maximo 10 caracteres

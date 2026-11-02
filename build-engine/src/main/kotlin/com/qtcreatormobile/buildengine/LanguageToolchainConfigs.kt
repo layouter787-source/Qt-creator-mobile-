@@ -3,6 +3,9 @@ package com.qtcreatormobile.buildengine
 /** Configuracao do toolchain Java on-device (javac). */
 data class JavaToolchainConfig(
     val javacPath: String,
+    val androidJarPath: String? = null,
+    val classOutputDir: String? = null,
+    val projectSources: List<String> = emptyList(),
 )
 
 /**
@@ -18,4 +21,7 @@ data class KotlinToolchainConfig(
     val javaHome: String,
     val classpathJars: List<String> = emptyList(),
     val composeCompilerPluginJar: String? = null,
+    val classOutputDir: String? = null,
+    val projectSources: List<String> = emptyList(),
+    val javaSourceStubs: List<String> = emptyList(),
 )

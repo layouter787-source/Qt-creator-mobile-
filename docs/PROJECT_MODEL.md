@@ -18,6 +18,8 @@ targets:
     type: android-app
     minSdk: 26
     sources:
+      c:
+        - src/native/**/*.c
       cpp:
         - src/native/**/*.cpp
         - src/native/**/*.c
@@ -33,6 +35,7 @@ targets:
 ## Campos
 
 - `languages`: lista das linguagens usadas neste projeto (`c`, `cpp`, `java`, `kotlin`). Determina quais toolchains o build engine precisa carregar.
+- `sources`: aceita caminhos individuais e padrões glob (`**/*.cpp`); C e C++ são compilados como linguagens distintas.
 - `targets`: um projeto pode ter mais de um target (ex.: app + biblioteca nativa compartilhada).
 - `entryPoint`:
   - `native-activity`: gera um APK sem nenhuma linha Kotlin/Java, usando `android_native_app_glue` (NativeActivity pura).

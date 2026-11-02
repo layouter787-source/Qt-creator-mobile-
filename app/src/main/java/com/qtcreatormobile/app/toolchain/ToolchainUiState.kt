@@ -1,9 +1,9 @@
 package com.qtcreatormobile.app.toolchain
 
-/** Estado observado pela UI (overlay de setup, popup opcional e tela de Configuracoes). */
 sealed interface ToolchainUiState {
     data object NotInstalled : ToolchainUiState
     data class Downloading(val fraction: Float) : ToolchainUiState
+    data class Paused(val fraction: Float, val reason: String) : ToolchainUiState
     data object Extracting : ToolchainUiState
     data object Integrating : ToolchainUiState
     data object Installed : ToolchainUiState

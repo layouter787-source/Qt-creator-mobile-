@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 
 private fun stageCaption(state: ToolchainUiState): String = when (state) {
     is ToolchainUiState.Downloading -> "Baixando... ${(state.fraction * 100).toInt()}%"
+    is ToolchainUiState.Paused -> state.reason
     is ToolchainUiState.Extracting -> "Extraindo arquivos..."
     is ToolchainUiState.Integrating -> "Integrando ao sistema..."
     is ToolchainUiState.Installed -> "Concluido!"
@@ -32,12 +33,18 @@ private fun stageCaption(state: ToolchainUiState): String = when (state) {
 fun MandatoryCppSetupOverlay(
     state: ToolchainUiState,
     onRetryClick: () -> Unit,
+    onPauseClick: () -> Unit,
 ) {
     when (state) {
         is ToolchainUiState.Downloading,
+        is ToolchainUiState.Paused,
         is ToolchainUiState.Extracting,
         is ToolchainUiState.Integrating -> {
-            val fraction = (state as? ToolchainUiState.Downloading)?.fraction
+            val fraction = when (state) {
+                is ToolchainUiState.Downloading -> state.fraction
+                is ToolchainUiState.Paused -> state.fraction
+                else -> null
+            }
             AlertDialog(
                 onDismissRequest = {},
                 title = { Text("Preparando o QT Creator Mobile") },
@@ -70,7 +77,13 @@ fun MandatoryCppSetupOverlay(
                         )
                     }
                 },
-                confirmButton = {},
+                confirmButton = {
+                    if (state is ToolchainUiState.Downloading || state is ToolchainUiState.Paused) {
+                        TextButton(onClick = onPauseClick) {
+                            Text(if (state is ToolchainUiState.Paused) "Continuar" else "Pausar")
+                        }
+                    }
+                },
             )
         }
         is ToolchainUiState.Failed -> {

@@ -19,7 +19,9 @@ object CppLinkCommandBuilder {
             add("-o")
             add(linkTask.outputPath)
             addAll(objectFilePaths)
+            add("-landroid")
             add("-llog")
+            add("-lc++_shared")
         }
     }
 }

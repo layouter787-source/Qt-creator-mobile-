@@ -2,6 +2,7 @@ package com.qtcreatormobile.buildengine
 
 import java.io.File
 import java.nio.file.Files
+import java.security.MessageDigest
 
 /** Constantes reais do layout de instalacao do Termux, usadas para o patch de prefixo. */
 object TermuxConstants {
@@ -71,17 +72,30 @@ class TermuxToolchainInstaller(
         val symlinkRewrite = TermuxConstants.PREFIX to usrDir.absolutePath
 
         val totalPackages = closure.packages.size
+        val completedPackages = File(installRootDir, ".completed-packages").apply { mkdirs() }
         closure.packages.forEachIndexed { index, pkg ->
+            val marker = File(completedPackages, pkg.name)
+            if (marker.exists()) {
+                progressListener.onProgress(DownloadProgress((index + 1).toLong(), totalPackages.toLong()))
+                return@forEachIndexed
+            }
             val debFile = File(installRootDir, "download-${pkg.name}.deb")
+            var extracted = false
             try {
                 downloader.download(pkg.downloadUrl, debFile) { progress ->
                     // Progresso combinado: pacotes ja concluidos + fracao do atual, sobre o total.
                     val overall = (index + progress.fraction) / totalPackages
                     progressListener.onProgress(DownloadProgress((overall * 100).toLong(), 100))
                 }
+                verifyPackage(debFile, pkg.size, pkg.sha256)
                 DebPackageExtractor.extract(debFile, installRootDir, symlinkPrefixRewrite = symlinkRewrite)
+                marker.createNewFile()
+                extracted = true
             } finally {
-                debFile.delete()
+                if (extracted) {
+                    debFile.delete()
+                    File(debFile.parentFile, debFile.name + ".source").delete()
+                }
             }
         }
 
@@ -112,4 +126,31 @@ class TermuxToolchainInstaller(
             .flatMap { it.walkTopDown().filter { f -> f.isFile && !Files.isSymbolicLink(f.toPath()) } }
             .forEach { file -> ElfPrefixPatcher.patch(file, TermuxConstants.PREFIX, patchPrefix) }
     }
+
+    private fun verifyPackage(file: File, expectedSize: Long?, expectedSha256: String?) {
+        if (expectedSize != null && file.length() != expectedSize) {
+            val actualSize = file.length()
+            file.delete()
+            File(file.parentFile, file.name + ".source").delete()
+            throw BuildEngineException("O download de ${file.name} veio incompleto ($actualSize de $expectedSize bytes). Toque em Tentar novamente.")
+        }
+        if (expectedSha256 != null) {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val actual = digest.digest().joinToString("") { "%02x".format(it) }
+            if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                file.delete()
+                File(file.parentFile, file.name + ".source").delete()
+                throw BuildEngineException("A verificação SHA-256 falhou para ${file.name}; o arquivo será baixado novamente ao tentar de novo.")
+            }
+        }
+    }
+
 }

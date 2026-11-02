@@ -2,8 +2,8 @@
 
 ## Principio de engenharia (importante)
 
-Este e um aplicativo de PRODUCAO, nao um protótipo/simulacao. Toda a logica de
-runtime chama processos, rede e criptografia de verdade: `HttpDownloader` faz
+Esta e uma implementacao em desenvolvimento. As partes existentes usam
+processos, rede e criptografia reais: `HttpDownloader` faz
 requisicoes HTTP reais, `ZipArchiveExtractor`/`DebPackageExtractor` descompactam
 bytes reais, `CppTaskExecutor`/`JavaTaskExecutor`/`KotlinTaskExecutor`/
 `CppLinkExecutor`/os executores de packaging invocam o binario real via
@@ -27,19 +27,24 @@ O unico trabalho que o usuario tem em qualquer setup de toolchain e ESPERAR.
 O setup obrigatorio (`startCppSetup`) encadeia CINCO downloads internos -
 clang + dependencias (Termux), sysroot (NDK oficial), JDK, e as ferramentas
 de packaging (aapt2 + build-tools + platform) - tudo como um UNICO fluxo
-silencioso. O setup do Kotlin (`startKotlinSetup`, opcional) baixa kotlinc +
-plugin compilador do Compose + todas as bibliotecas Compose/Material3 do
-mesmo jeito. A UI so mostra uma barra de progresso avancando ate `Installed`.
-Nenhuma tela pede URL, versao, ou qualquer decisao tecnica ao usuario final.
+silencioso. O setup opcional do Kotlin baixa kotlinc, o plugin Compose e um conjunto curado
+de bibliotecas Compose/Material3. Isso nao e um resolvedor Maven completo e o
+pipeline ainda nao mescla recursos Android dessas bibliotecas. A UI mostra o
+progresso de cada setup; URLs e versoes sao mantidas no codigo.
+
+## Limites do pipeline atual
+
+O motor executa compiladores locais e produz APKs simples para um target por projeto. Ele nao executa Gradle de projetos importados, nao resolve dependencias Maven arbitrarias, nao mescla manifestos/recursos/assets do projeto, nao aplica flavors/plugins e nao oferece depuracao. O C++ NativeActivity inicial e um esqueleto sem tela. Os templates Java e Kotlin usam Activities com Views.
 
 ## Modulos
 
 1. UI/Editor (:app) - Jetpack Compose.
-2. Language Services (:lang-c-cpp, :lang-java, :lang-kotlin) - ainda nao iniciados.
+2. Realce de sintaxe: Sora + TextMate para C/C++, Java, Kotlin, XML e JSON; LSP/diagnosticos ainda nao integrados.
 3. Toolchains nativas on-device (dentro de :build-engine) - binarios reais rodando no ARM64 do aparelho.
 4. Build Engine (:build-engine) - `BuildPlanner` + `BuildPipeline` orquestrando tudo fim-a-fim.
 5. Packaging (dentro de :build-engine) - aapt2, D8, apksigner.
 6. Project Model (:project-model) - formato `qtcm.project.yaml`.
+7. Gerenciamento local de projetos, explorador e editor Compose (:app).
 
 ## Bugs encontrados e corrigidos (revisao de integracao)
 
@@ -92,7 +97,7 @@ resolvedor transitivo de verdade existir.
 ## Decisao: distribuicao do toolchain (CONFIRMADA)
 
 - **Setup obrigatorio (`startCppSetup`)**: clang+dependencias, sysroot, JDK e ferramentas de packaging - sequencia silenciosa, sem perguntar nada.
-- **Kotlin (`startKotlinSetup`, opcional)**: kotlinc + Compose + Material3 completos, mesmo principio - popup pergunta-antes-de-baixar, com fallback em Configuracoes.
+- **Kotlin (`startKotlinSetup`, opcional)**: kotlinc, plugin Compose e conjunto curado de bibliotecas; sem suporte geral a dependencias transitivas e recursos Android.
 - Cada linguagem/ferramenta e extraida no seu proprio subdiretorio (`toolchain/cpp`, `toolchain/java`, `toolchain/kotlin`, `toolchain/packaging`).
 
 ## Estado atual
@@ -104,13 +109,16 @@ resolvedor transitivo de verdade existir.
 - [x] `BuildPipeline`: orquestrador fim-a-fim, para na primeira falha.
 - [x] Resolvedores dinamicos reais: `GitHubReleaseResolver`, `TermuxPackageIndexResolver` (+ `AptIndexParser`), `AndroidRepositoryResolver`, `MavenArtifactDownloader`.
 - [x] Formatos de arquivo: `ZipArchiveExtractor`, `FilteredZipExtractor`, `TarXzExtractor`, `TarGzExtractor`, `DebPackageExtractor`, `DirectoryFlattener`, `AarClassesJarExtractor`, `ArchiveExtractors.forUrl`.
-- [x] `PackagingToolsInstaller`, `JdkInstaller`, `KotlinInstaller` (com Compose+Material3 completos) implementados, testados, e ligados em `ToolchainViewModel`.
-- [x] Cadeia completa de C/C++ + JDK + packaging + Kotlin/Compose/Material3, com os bugs de integracao corrigidos, ligada no `:app`.
+- [x] `PackagingToolsInstaller`, `JdkInstaller`, `KotlinInstaller` (com bibliotecas Compose/Material3 curadas) implementados, testados, e ligados em `ToolchainViewModel`.
+- [x] Cadeia de C/C++ + JDK + packaging + Kotlin/Compose/Material3, com os bugs de integracao corrigidos, ligada no `:app`.
 - [x] UI de setup 100% automatica (C/C++ obrigatorio) + popup opcional (Kotlin) + `HomeScreen`.
 - [ ] Keystore de RELEASE nao existe - decisao do usuario, o app nao pode gerar isso sozinho com seguranca.
-- [ ] `BuildPipeline` ainda nao esta ligado a UI do `:app` - proximo passo natural.
-- [ ] Nenhuma navegacao/tela de Configuracoes existe ainda no app (necessaria para o popup opcional do Kotlin ser de fato acionavel pelo usuario).
+- [x] Tela de projetos locais, criação por modelos C++ Native/Kotlin Android, explorador e editor com salvamento.
+- [x] Tela de toolchains com acionamento do setup opcional de Kotlin + Compose + Material3.
+- [x] Build UI ligada ao `BuildPipeline`: manifesto minimo, expansao de fontes por glob, compilacao, DEX, APK debug assinado e instalacao do artefato.
+- [ ] Recursos Android customizados e multiplos targets ainda nao sao empacotados pela UI.
+- [ ] Importacao/exportacao de projetos via armazenamento compartilhado.
 
 ## Aviso: CI
 
-O repositorio provavelmente nao tera permissao de escrita em `.github/workflows/` pelo conector do GitHub (confirmar). Se for o caso, o workflow precisa ser criado manualmente - usar `gradle/actions/setup-gradle` + `gradle assembleDebug`, ja que nao ha Gradle Wrapper versionado.
+O Gradle Wrapper esta versionado (`./gradlew`). O workflow de CI pode usar `gradle/actions/setup-gradle` + `./gradlew assembleDebug`.

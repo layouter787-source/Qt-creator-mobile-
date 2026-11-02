@@ -47,12 +47,15 @@ class PackagingToolsInstaller(
     }
 
     private fun downloadAndExtract(url: String, extractor: ArchiveExtractor, installRootDir: File) {
-        val tempFile = File(installRootDir.parentFile ?: installRootDir, "packaging-download-${System.nanoTime()}.tmp")
+        val stableKey = url.hashCode().toUInt().toString(16)
+        val tempFile = File(installRootDir.parentFile ?: installRootDir, "packaging-$stableKey.tmp")
+        var extracted = false
         try {
             downloader.download(url, tempFile, DownloadProgressListener {})
             extractor.extract(tempFile, installRootDir)
+            extracted = true
         } finally {
-            tempFile.delete()
+            if (extracted) tempFile.delete()
         }
     }
 }

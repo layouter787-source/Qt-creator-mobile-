@@ -23,6 +23,7 @@ fun FirstLaunchToolchainDialog(
     state: ToolchainUiState,
     onDownloadClick: () -> Unit,
     onDismiss: () -> Unit,
+    onPauseClick: () -> Unit = {},
 ) {
     when (state) {
         is ToolchainUiState.NotInstalled -> {
@@ -44,20 +45,23 @@ fun FirstLaunchToolchainDialog(
                 },
             )
         }
-        is ToolchainUiState.Downloading -> {
+        is ToolchainUiState.Downloading, is ToolchainUiState.Paused -> {
             AlertDialog(
                 onDismissRequest = {},
                 title = { Text("Baixando suporte a $languageLabel...") },
                 text = {
                     Column {
                         LinearProgressIndicator(
-                            progress = { state.fraction },
+                            progress = { when (state) { is ToolchainUiState.Downloading -> state.fraction; is ToolchainUiState.Paused -> state.fraction; else -> 0f } },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         )
-                        Text("${(state.fraction * 100).toInt()}%")
+                        val fraction = when (state) { is ToolchainUiState.Downloading -> state.fraction; is ToolchainUiState.Paused -> state.fraction; else -> 0f }
+                        Text(if (state is ToolchainUiState.Paused) "${state.reason} · ${(fraction * 100).toInt()}%" else "${(fraction * 100).toInt()}%")
                     }
                 },
-                confirmButton = {},
+                confirmButton = {
+                    TextButton(onClick = onPauseClick) { Text(if (state is ToolchainUiState.Paused) "Continuar" else "Pausar") }
+                },
             )
         }
         is ToolchainUiState.Extracting, is ToolchainUiState.Integrating -> {

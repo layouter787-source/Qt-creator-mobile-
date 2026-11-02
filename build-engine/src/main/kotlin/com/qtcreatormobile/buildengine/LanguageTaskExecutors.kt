@@ -9,6 +9,9 @@ class JavaTaskExecutor(
     private val workingDir: File,
 ) : TaskExecutor {
 
+    private var projectCompiled = false
+
+    @Synchronized
     override fun execute(task: CompileTask): TaskResult {
         if (task.language != Language.JAVA) {
             throw BuildEngineException(
@@ -16,10 +19,13 @@ class JavaTaskExecutor(
             )
         }
 
-        val command = JavaCompileCommandBuilder.build(task, config)
+        if (config.projectSources.isNotEmpty() && projectCompiled) return TaskResult(task.id, true, "Incluído na compilação conjunta Java.")
+        val sources = config.projectSources.ifEmpty { listOf(task.sourcePath) }
+        val command = JavaCompileCommandBuilder.build(task, config, sources)
         File(task.outputPath).parentFile?.mkdirs()
 
         val result = processRunner.run(command, workingDir)
+        if (result.succeeded && config.projectSources.isNotEmpty()) projectCompiled = true
 
         return TaskResult(
             taskId = task.id,
@@ -39,6 +45,9 @@ class KotlinTaskExecutor(
     private val workingDir: File,
 ) : TaskExecutor {
 
+    private var projectCompiled = false
+
+    @Synchronized
     override fun execute(task: CompileTask): TaskResult {
         if (task.language != Language.KOTLIN) {
             throw BuildEngineException(
@@ -46,10 +55,13 @@ class KotlinTaskExecutor(
             )
         }
 
-        val command = KotlinCompileCommandBuilder.build(task, config)
+        if (config.projectSources.isNotEmpty() && projectCompiled) return TaskResult(task.id, true, "Incluído na compilação conjunta Kotlin.")
+        val sources = config.projectSources.ifEmpty { listOf(task.sourcePath) }
+        val command = KotlinCompileCommandBuilder.build(task, config, sources)
         File(task.outputPath).parentFile?.mkdirs()
 
         val result = processRunner.runWithEnv(command, workingDir, mapOf("JAVA_HOME" to config.javaHome))
+        if (result.succeeded && config.projectSources.isNotEmpty()) projectCompiled = true
 
         return TaskResult(
             taskId = task.id,

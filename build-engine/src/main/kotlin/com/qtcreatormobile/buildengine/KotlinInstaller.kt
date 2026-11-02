@@ -100,11 +100,13 @@ class KotlinInstaller(
             mavenDownloader.download(repo, coordinate, "jar", finalJar)
         } else {
             val aarFile = java.io.File(libsDir, "${coordinate.artifact}-${coordinate.version}.aar.tmp")
+            var extracted = false
             try {
                 mavenDownloader.download(repo, coordinate, "aar", aarFile)
                 AarClassesJarExtractor.extractClassesJar(aarFile, finalJar)
+                extracted = true
             } finally {
-                aarFile.delete()
+                if (extracted) aarFile.delete()
             }
         }
     }

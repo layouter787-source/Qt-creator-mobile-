@@ -39,7 +39,10 @@ class TermuxPackageIndexResolver(
         visit(packageName)
 
         val ordered = visited.sortedBy { name -> dependencyDepth(name, index) }
-        val packages = ordered.map { name -> ResolvedPackage(name, "$repoBaseUrl/${index.getValue(name).filename}") }
+        val packages = ordered.map { name ->
+            val pkg = index.getValue(name)
+            ResolvedPackage(name, "$repoBaseUrl/${pkg.filename}", pkg.sha256, pkg.size)
+        }
         return DependencyClosure(packages, unresolved)
     }
 

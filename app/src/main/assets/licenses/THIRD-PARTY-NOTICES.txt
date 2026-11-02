@@ -1,0 +1,5 @@
+QT Creator Mobile includes Sora Editor under LGPL-2.1-or-later. See SORA-LGPL-2.1.txt.
+
+The TextMate grammars and dark theme from Microsoft Visual Studio Code are distributed under the MIT License. See MIT-VSCODE.txt.
+
+The Kotlin TextMate grammar and language configuration from vscode-kotlin are distributed under the MIT License. See MIT-VSCODE-KOTLIN.txt.

@@ -8,6 +8,8 @@ data class AptPackage(
     val name: String,
     val filename: String,
     val depends: List<List<String>>,
+    val sha256: String? = null,
+    val size: Long? = null,
 )
 
 /** Le o arquivo `Packages` de um repositorio apt/Debian (blocos `Campo: valor` separados por linha em branco). */
@@ -19,7 +21,13 @@ object AptIndexParser {
             val fields = parseFields(stanza)
             val name = fields["Package"] ?: continue
             val filename = fields["Filename"] ?: continue
-            packages[name] = AptPackage(name, filename, parseDepends(fields["Depends"]))
+            packages[name] = AptPackage(
+                name = name,
+                filename = filename,
+                depends = parseDepends(fields["Depends"]),
+                sha256 = fields["SHA256"]?.trim()?.takeIf { it.isNotEmpty() },
+                size = fields["Size"]?.trim()?.toLongOrNull(),
+            )
         }
         return packages
     }
@@ -51,7 +59,12 @@ object AptIndexParser {
     }
 }
 
-data class ResolvedPackage(val name: String, val downloadUrl: String)
+data class ResolvedPackage(
+    val name: String,
+    val downloadUrl: String,
+    val sha256: String? = null,
+    val size: Long? = null,
+)
 
 /**
  * Resultado de resolver um pacote e todas as suas dependencias: [packages] ja

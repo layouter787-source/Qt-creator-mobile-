@@ -1,0 +1,10 @@
+{
+  "languages": [
+    {"grammar":"textmate/syntaxes/cpp.tmLanguage.json","name":"c","scopeName":"source.cpp","languageConfiguration":"textmate/configurations/c.json"},
+    {"grammar":"textmate/syntaxes/cpp.tmLanguage.json","name":"cpp","scopeName":"source.cpp","languageConfiguration":"textmate/configurations/cpp.json"},
+    {"grammar":"textmate/syntaxes/java.tmLanguage.json","name":"java","scopeName":"source.java","languageConfiguration":"textmate/configurations/java.json"},
+    {"grammar":"textmate/syntaxes/kotlin.tmLanguage.json","name":"kotlin","scopeName":"source.kotlin","languageConfiguration":"textmate/configurations/kotlin.json"},
+    {"grammar":"textmate/syntaxes/xml.tmLanguage.json","name":"xml","scopeName":"text.xml"},
+    {"grammar":"textmate/syntaxes/JSON.tmLanguage.json","name":"json","scopeName":"source.json"}
+  ]
+}

@@ -7,3 +7,7 @@
 /captures
 .externalNativeBuild
 .cxx
+.kotlin/
+/app/build/
+/build-engine/build/
+/project-model/build/

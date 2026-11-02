@@ -29,6 +29,7 @@ class BuildPipeline(
     private val dexer: Dexer,
     private val aapt2Linker: Aapt2Linker,
     private val apkSigner: ApkSigner,
+    private val nativeRuntimeLibraries: Map<String, String> = emptyMap(),
 ) {
 
     /** @param buildDir pasta dos artefatos intermediarios (ver [BuildPlanner.plan]). */
@@ -49,7 +50,7 @@ class BuildPipeline(
         }
 
         // 2) Linkar os .o (C/C++) em .so, se houver algum nesta target.
-        val hasNativeSources = target.sources.cpp.isNotEmpty()
+        val hasNativeSources = target.sources.c.isNotEmpty() || target.sources.cpp.isNotEmpty()
         var linkedSoPath: String? = null
         if (hasNativeSources) {
             val linkTask = graph.linkTasks.first()
@@ -82,6 +83,7 @@ class BuildPipeline(
         //    que FALHOU, em vez de derrubar o pipeline com uma excecao.
         val extraEntries = buildMap {
             linkedSoPath?.let { put("lib/arm64-v8a/lib${target.id}.so", it) }
+            nativeRuntimeLibraries.forEach { (apkPath, filePath) -> if (File(filePath).isFile) put(apkPath, filePath) }
             dexPath?.let { put("classes.dex", it) }
         }
         if (extraEntries.isNotEmpty()) {
