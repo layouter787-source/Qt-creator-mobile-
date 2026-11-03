@@ -1,6 +1,8 @@
 package com.qtcreatormobile.projectmodel
 
+import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
+import org.yaml.snakeyaml.constructor.SafeConstructor
 import java.io.File
 import java.io.InputStream
 
@@ -17,9 +19,12 @@ object ProjectModelLoader {
     }
 
     fun loadFromStream(input: InputStream): ProjectModel {
-        val yaml = Yaml()
+        // SafeConstructor: so le tipos basicos (mapas, listas, textos, numeros). O construtor
+        // padrao do SnakeYAML tambem usa java.beans, que NAO existe no Android, e permite
+        // instanciar classes arbitrarias a partir do arquivo - indesejavel para um projeto de terceiros.
+        val yaml = Yaml(SafeConstructor(LoaderOptions()))
         @Suppress("UNCHECKED_CAST")
-        val root = yaml.load(input) as? Map<String, Any?>
+        val root = yaml.load<Any?>(input) as? Map<String, Any?>
             ?: throw ProjectModelException("qtcm.project.yaml esta vazio ou mal formatado.")
 
         val name = root.requireString("name")
@@ -33,6 +38,7 @@ object ProjectModelLoader {
         val targetsRaw = root["targets"] as? List<*>
             ?: throw ProjectModelException("Campo 'targets' ausente ou vazio.")
 
+        @Suppress("UNCHECKED_CAST")
         val targets = targetsRaw.map { parseTarget(it as Map<String, Any?>) }
 
         val model = ProjectModel(
@@ -55,7 +61,6 @@ object ProjectModelLoader {
         @Suppress("UNCHECKED_CAST")
         val sourcesRaw = raw["sources"] as? Map<String, Any?> ?: emptyMap()
         val sources = TargetSources(
-            c = sourcesRaw.stringList("c"),
             cpp = sourcesRaw.stringList("cpp"),
             kotlin = sourcesRaw.stringList("kotlin"),
             java = sourcesRaw.stringList("java"),
