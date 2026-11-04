@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -16,7 +15,12 @@ android {
         // "/data/data/<applicationId>/files/usr" = 21 + tamanho do id <= 31. Ver docs/PREFIX_ALIAS.md.
         applicationId = "com.qtcm"
         minSdk = 26
-        targetSdk = 34
+
+        // IMPORTANTE: precisa ser 28. Desde o Android 10 (API 29), apps com targetSdk >= 29 NAO
+        // podem executar arquivos da propria pasta de dados - e o clang, o aapt2 e o java baixados
+        // moram la. Com 28 a execucao e permitida (e o que o Termux e a AndroidIDE fazem).
+        // Consequencia: o app nao pode ser publicado na Play Store. Ver docs/EXECUTION_MODEL.md.
+        targetSdk = 28
         versionCode = 1
         versionName = "0.0.1"
     }
@@ -25,10 +29,13 @@ android {
         compose = true
     }
 
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -52,12 +59,6 @@ android {
 
 dependencies {
     implementation(project(":build-engine"))
-
-    implementation(platform("io.github.rosemoe:editor-bom:0.24.4"))
-    implementation("io.github.rosemoe:editor")
-    implementation("io.github.rosemoe:language-textmate")
-    implementation("io.github.rosemoe:language-java")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.compose.ui:ui:1.6.8")
