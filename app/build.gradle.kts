@@ -1,6 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Desde o Kotlin 2.0 o compilador do Compose vem como plugin Gradle do Kotlin;
+    // composeOptions.kotlinCompilerExtensionVersion nao e mais usado.
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -29,16 +34,9 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     // Varias bibliotecas do build-engine (commons-compress, xz, json, snakeyaml) trazem os
@@ -54,6 +52,12 @@ android {
                 "META-INF/versions/**",
             )
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
