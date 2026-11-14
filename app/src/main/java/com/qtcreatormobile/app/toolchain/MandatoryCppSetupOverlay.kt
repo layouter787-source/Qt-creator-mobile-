@@ -78,10 +78,18 @@ fun MandatoryCppSetupOverlay(
                     }
                 },
                 confirmButton = {
-                    if (state is ToolchainUiState.Downloading || state is ToolchainUiState.Paused) {
-                        TextButton(onClick = onPauseClick) {
-                            Text(if (state is ToolchainUiState.Paused) "Continuar" else "Pausar")
+                    when (state) {
+                        is ToolchainUiState.Downloading -> TextButton(onClick = onPauseClick) {
+                            Text("Pausar")
                         }
+                        is ToolchainUiState.Paused -> {
+                            // Só mostrar "Continuar" quando a pausa foi solicitada manualmente.
+                            // Pausas por rede/segundo plano terminam automaticamente quando a causa desaparece.
+                            if (state.reason == "Pausado por você") {
+                                TextButton(onClick = onPauseClick) { Text("Continuar") }
+                            }
+                        }
+                        else -> Unit
                     }
                 },
             )

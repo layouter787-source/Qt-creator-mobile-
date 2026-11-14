@@ -1,0 +1,116 @@
+name: Android - Build All APKs and AAB
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Debug, Signed Release and AAB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Restore private signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/qtcm-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          {
+            echo "ORG_GRADLE_PROJECT_RELEASE_STORE_FILE=$KEYSTORE_PATH"
+            echo "ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS=$KEY_ALIAS"
+            echo "ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Run project tests
+        run: |
+          gradle :project-model:test :build-engine:test --no-daemon --console=plain
+
+      - name: Build all Android packages
+        run: |
+          gradle :app:assembleDebug :app:assembleRelease :app:bundleRelease --no-daemon --console=plain
+
+      - name: Verify signed Release APK
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
+
+      - name: Verify signed AAB
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          jarsigner -verify -verbose -certs "$AAB"
+
+      - name: Verify all three outputs exist
+        run: |
+          set -euo pipefail
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/release/app-release.apk
+          test -s app/build/outputs/bundle/release/app-release.aab
+          echo "Debug APK, signed Release APK and signed AAB generated successfully."
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-creator-mobile-debug-apk
+          if-no-files-found: error
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload signed Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-creator-mobile-release-apk
+          if-no-files-found: error
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Upload signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt-creator-mobile-release-aab
+          if-no-files-found: error
+          path: app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
