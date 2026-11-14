@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -42,7 +43,20 @@ class DownloadControl {
 }
 
 class HttpDownloader(private val control: DownloadControl = DownloadControl()) : Downloader {
+    private companion object {
+        /**
+         * Um trava por arquivo de destino (compartilhada por todas as instancias): duas chamadas
+         * para o mesmo destino nunca escrevem/renomeiam o mesmo `.part` ao mesmo tempo.
+         */
+        val locks = ConcurrentHashMap<String, Any>()
+    }
+
     override fun download(url: String, destination: File, listener: DownloadProgressListener) {
+        val lock = locks.computeIfAbsent(destination.absolutePath) { Any() }
+        synchronized(lock) { downloadLocked(url, destination, listener) }
+    }
+
+    private fun downloadLocked(url: String, destination: File, listener: DownloadProgressListener) {
         if (control.isPaused()) throw DownloadPausedException()
         destination.parentFile?.mkdirs()
         val completeSource = File(destination.parentFile ?: File("."), destination.name + ".source")
@@ -110,10 +124,23 @@ class HttpDownloader(private val control: DownloadControl = DownloadControl()) :
     }
 
     private fun moveCompletedFile(partial: File, destination: File) {
+        // Outra chamada ja pode ter finalizado este mesmo arquivo: nada a fazer.
+        if (!partial.exists() && destination.isFile && destination.length() > 0L) return
         try {
             Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
         } catch (e: IOException) {
-            throw IOException("Não foi possível finalizar ${destination.name}: ${e.message}", e)
+            // Alguns sistemas de arquivos do Android recusam o rename atomico; copiar e apagar funciona.
+            try {
+                partial.copyTo(destination, overwrite = true)
+                partial.delete()
+            } catch (copyError: IOException) {
+                e.addSuppressed(copyError)
+                throw IOException(
+                    "Não foi possível finalizar ${destination.name}: ${e.javaClass.simpleName}: ${e.message} " +
+                        "(parcial existe=${partial.exists()}, destino existe=${destination.exists()})",
+                    e,
+                )
+            }
         }
     }
 }
