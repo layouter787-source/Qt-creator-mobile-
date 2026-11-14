@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
                         MandatoryCppSetupOverlay(
                             state = cppState,
                             onRetryClick = { toolchainViewModel.startCppSetup() },
-                            onPauseClick = toolchainViewModel::toggleManualPause,
+                            onPauseClick = { toolchainViewModel.toggleManualPause() },
                         )
                     }
                 }

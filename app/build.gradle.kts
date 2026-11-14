@@ -1,12 +1,21 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    // Desde o Kotlin 2.0 o compilador do Compose vem como plugin Gradle do Kotlin;
-    // composeOptions.kotlinCompilerExtensionVersion nao e mais usado.
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// A chave nunca fica no repositório. Os valores são fornecidos por Gradle properties
+// (localmente) ou pelos GitHub Actions Secrets (CI).
+val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
 
 android {
     // O codigo continua nos pacotes com.qtcreatormobile.app.*; so o applicationId e curto.
@@ -30,13 +39,46 @@ android {
         versionName = "0.0.1"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            // Sem credenciais, o Gradle pode compilar localmente um release nao assinado.
+            // O workflow de release valida os quatro secrets antes de iniciar a compilacao.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    // A API 28 e uma restricao intencional do modelo atual de execucao das toolchains.
+    // Desativamos apenas este aviso do Lint para permitir gerar builds Release para instalacao
+    // direta. Isto NAO torna o app elegivel para publicacao na Google Play.
+    lint {
+        disable += "ExpiredTargetSdkVersion"
     }
 
     // Varias bibliotecas do build-engine (commons-compress, xz, json, snakeyaml) trazem os
@@ -55,14 +97,14 @@ android {
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-    }
-}
-
 dependencies {
     implementation(project(":build-engine"))
+
+    // Sora Editor 0.23.6 mantém os pacotes io.github.rosemoe.sora usados pelo wrapper atual.
+    implementation(platform("io.github.Rosemoe.sora-editor:bom:0.23.6"))
+    implementation("io.github.Rosemoe.sora-editor:editor")
+    implementation("io.github.Rosemoe.sora-editor:language-textmate")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.compose.ui:ui:1.6.8")
@@ -70,9 +112,4 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Editor de codigo (Sora Editor) com realce TextMate; usado por home/SoraCodeEditor.kt.
-    implementation(platform("io.github.Rosemoe.sora-editor:bom:0.23.6"))
-    implementation("io.github.Rosemoe.sora-editor:editor")
-    implementation("io.github.Rosemoe.sora-editor:language-textmate")
 }
