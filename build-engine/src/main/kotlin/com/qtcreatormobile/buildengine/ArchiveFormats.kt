@@ -8,6 +8,15 @@ import java.io.File
 class TarGzExtractor : ArchiveExtractor {
     override fun extract(archive: File, targetDir: File) {
         targetDir.mkdirs()
+        // Cabecalho gzip = 1f 8b. Se nao for, o arquivo esta corrompido/incompleto (ou nao e gzip):
+        // falha com mensagem clara em vez do erro interno "ID1ID2".
+        val magic = archive.inputStream().use { input -> ByteArray(2).also { input.read(it) } }
+        if (magic[0] != 0x1f.toByte() || magic[1] != 0x8b.toByte()) {
+            throw BuildEngineException(
+                "O arquivo baixado (${archive.name}, ${archive.length()} bytes) nao e um .tar.gz valido - " +
+                    "provavelmente corrompido. Toque em Tentar novamente para baixar de novo."
+            )
+        }
         TarArchiveInputStream(GzipCompressorInputStream(archive.inputStream().buffered())).use { tar ->
             var entry = tar.nextEntry
             while (entry != null) {
