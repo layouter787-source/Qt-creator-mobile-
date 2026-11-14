@@ -109,6 +109,11 @@ class HttpDownloader(private val control: DownloadControl = DownloadControl()) :
                     output.flush()
                 }
             }
+            // Conexao que cai no meio pode terminar "limpa" (-1) com o arquivo cortado; sem esta
+            // checagem o arquivo truncado seria tratado como completo e falharia so na extracao.
+            if (totalBytes > 0 && partial.length() != totalBytes) {
+                throw IOException("Download incompleto de ${destination.name}: ${partial.length()} de $totalBytes bytes")
+            }
             moveCompletedFile(partial, destination)
             completeSource.writeText(url)
             partialSource.delete()
