@@ -1,6 +1,11 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Desde o Kotlin 2.0 o compilador do Compose vem como plugin Gradle do Kotlin;
+    // composeOptions.kotlinCompilerExtensionVersion nao e mais usado.
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -29,16 +34,9 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     // Varias bibliotecas do build-engine (commons-compress, xz, json, snakeyaml) trazem os
@@ -57,6 +55,12 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 dependencies {
     implementation(project(":build-engine"))
 
@@ -66,4 +70,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    // Editor de codigo (Sora Editor) com realce TextMate; usado por home/SoraCodeEditor.kt.
+    implementation(platform("io.github.Rosemoe.sora-editor:bom:0.23.6"))
+    implementation("io.github.Rosemoe.sora-editor:editor")
+    implementation("io.github.Rosemoe.sora-editor:language-textmate")
 }
