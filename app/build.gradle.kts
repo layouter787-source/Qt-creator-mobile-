@@ -74,6 +74,13 @@ android {
         jvmTarget = "17"
     }
 
+    // A API 28 e uma restricao intencional do modelo atual de execucao das toolchains.
+    // Desativamos apenas este aviso do Lint para permitir gerar builds Release para instalacao
+    // direta. Isto NAO torna o app elegivel para publicacao na Google Play.
+    lint {
+        disable += "ExpiredTargetSdkVersion"
+    }
+
     // Varias bibliotecas do build-engine (commons-compress, xz, json, snakeyaml) trazem os
     // mesmos arquivos de licenca em META-INF; sem excluir, o AGP falha com "2 files found
     // with path 'META-INF/...'" ao juntar os recursos Java.
