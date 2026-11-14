@@ -1,16 +1,46 @@
 package com.qtcreatormobile.buildengine
 
+import java.io.IOException
+
 /** Busca o conteudo de uma URL como texto. Abstrai HTTP para permitir testar sem rede real. */
 fun interface TextFetcher {
     fun fetch(url: String): String
 }
 
-class HttpTextFetcher : TextFetcher {
+/**
+ * Busca texto via HTTP COM timeouts e novas tentativas. Sem timeout, uma conexao pendurada
+ * (comum em rede movel) deixava o setup parado em 0% para sempre, sem erro e sem retomar.
+ */
+class HttpTextFetcher(
+    private val connectTimeoutMs: Int = 20_000,
+    private val readTimeoutMs: Int = 30_000,
+    private val attempts: Int = 3,
+    private val retryDelayMs: Long = 1_500,
+) : TextFetcher {
     override fun fetch(url: String): String {
+        var lastError: IOException? = null
+        repeat(attempts) { attempt ->
+            try {
+                return fetchOnce(url)
+            } catch (e: IOException) {
+                lastError = e
+                if (attempt < attempts - 1) Thread.sleep(retryDelayMs * (attempt + 1))
+            }
+        }
+        throw IOException("Nao foi possivel obter $url apos $attempts tentativas: ${lastError?.message}", lastError)
+    }
+
+    private fun fetchOnce(url: String): String {
         val connection = java.net.URL(url).openConnection()
+        connection.connectTimeout = connectTimeoutMs
+        connection.readTimeout = readTimeoutMs
         // A API do GitHub exige um User-Agent; sem isso algumas requisicoes sao recusadas.
         connection.setRequestProperty("User-Agent", "QTCreatorMobile")
-        return connection.getInputStream().bufferedReader().use { it.readText() }
+        return try {
+            connection.getInputStream().bufferedReader().use { it.readText() }
+        } finally {
+            (connection as? java.net.HttpURLConnection)?.disconnect()
+        }
     }
 }
 
