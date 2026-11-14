@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ToolchainViewModel(application: Application) : AndroidViewModel(application) {
     private val toolchainRoot = File(application.filesDir, "toolchain")
@@ -47,6 +48,15 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     @Volatile private var manuallyPaused = pausePreferences.getBoolean("manual_pause", false)
     @Volatile private var activeLanguage: Language? = null
     @Volatile private var activeJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Reserva ATOMICA da instalacao. startCppSetup() pode ser chamado ao mesmo tempo pelo
+     * MainActivity, pelo callback de rede (resumeSetup) e pelo botao "Tentar novamente"; checar
+     * so activeJob nao basta porque ele so e atribuido depois do launch. Duas instalacoes
+     * baixando o mesmo .part faziam uma delas falhar ao finalizar o arquivo.
+     */
+    private val setupRunning = AtomicBoolean(false)
+
     private val lastFractions = ConcurrentHashMap<Language, Float>().apply {
         put(Language.CPP, 0f)
         put(Language.KOTLIN, 0f)
@@ -190,12 +200,22 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun launchSetup(language: Language, work: suspend (MutableStateFlow<ToolchainUiState>, DownloadProgressListener, ToolchainStageListener) -> Unit) {
+        // Reserva atomica: so uma instalacao por vez, mesmo com chamadas simultaneas.
+        if (!setupRunning.compareAndSet(false, true)) return
         val stateFlow = states.getValue(language)
-        activeLanguage = language
-        lastFractions[language] = (stateFlow.value as? ToolchainUiState.Paused)?.fraction ?: lastFractions[language] ?: 0f
-        val progress = progressListenerFor(language, stateFlow)
-        val stages = intermediateStageListenerFor(stateFlow)
-        ToolchainDownloadService.start(getApplication())
+        val progress: DownloadProgressListener
+        val stages: ToolchainStageListener
+        try {
+            activeLanguage = language
+            lastFractions[language] = (stateFlow.value as? ToolchainUiState.Paused)?.fraction ?: lastFractions[language] ?: 0f
+            progress = progressListenerFor(language, stateFlow)
+            stages = intermediateStageListenerFor(stateFlow)
+            ToolchainDownloadService.start(getApplication())
+        } catch (e: Throwable) {
+            activeLanguage = null
+            setupRunning.set(false)
+            throw e
+        }
         activeJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 while (true) {
@@ -233,6 +253,7 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
             } finally {
                 activeJob = null
                 activeLanguage = null
+                setupRunning.set(false)
             }
         }
     }
