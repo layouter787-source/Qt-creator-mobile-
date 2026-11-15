@@ -7,19 +7,16 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.qtcreatormobile.buildengine.AndroidRepositoryResolver
 import com.qtcreatormobile.buildengine.CachingToolchainProvisioner
 import com.qtcreatormobile.buildengine.DownloadControl
 import com.qtcreatormobile.buildengine.DownloadPausedException
 import com.qtcreatormobile.buildengine.DownloadProgressListener
-import com.qtcreatormobile.buildengine.FilteredZipExtractor
 import com.qtcreatormobile.buildengine.HttpDownloader
 import com.qtcreatormobile.buildengine.JdkInstaller
 import com.qtcreatormobile.buildengine.KotlinInstaller
 import com.qtcreatormobile.buildengine.MavenArtifactDownloader
 import com.qtcreatormobile.buildengine.PackagingLayout
 import com.qtcreatormobile.buildengine.PackagingToolsInstaller
-import com.qtcreatormobile.buildengine.RemoteToolchainInstaller
 import com.qtcreatormobile.buildengine.TermuxToolchainInstaller
 import com.qtcreatormobile.buildengine.ToolchainInstaller
 import com.qtcreatormobile.buildengine.ToolchainLayout
@@ -87,7 +84,9 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     private fun isFullyInstalled(language: Language): Boolean {
         if (!mainBinaryFile(language).exists()) return false
         return when (language) {
-            Language.CPP, Language.C -> sysrootMarkerFile().exists() && isPackagingInstalled() && isJdkInstalled()
+            // O sysroot do NDK NAO faz parte do setup automatico: o usuario baixa o NDK e o importa
+            // (ver NdkImportViewModel), porque o pacote tem ~700 MB.
+            Language.CPP, Language.C -> isPackagingInstalled() && isJdkInstalled()
             Language.KOTLIN -> File(installRootDir(Language.KOTLIN), "compose-libs/material3-1.4.0.jar").exists()
             Language.JAVA -> true
         }
@@ -102,7 +101,6 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
     private fun isJdkInstalled(): Boolean = mainBinaryFile(Language.JAVA).exists()
     private fun installRootDir(language: Language): File = File(toolchainRoot, ToolchainLayout.subdirFor(language))
     private fun mainBinaryFile(language: Language): File = File(installRootDir(language), ToolchainLayout.mainBinaryNameFor(language))
-    private fun sysrootMarkerFile(): File = File(installRootDir(Language.CPP), "sysroot/usr/include/stdio.h")
     fun jdkHome(): String = installRootDir(Language.JAVA).absolutePath
 
     fun kotlinClasspathJars(): List<String> =
@@ -121,12 +119,6 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
             val prefixAlias = "/data/data/${getApplication<Application>().packageName}/files/usr"
             runStep(mainBinaryFile(Language.CPP), installRootDir(Language.CPP), stateFlow, stages) {
                 TermuxToolchainInstaller(downloader = downloader, prefixAlias = prefixAlias, progressListener = progress, stageListener = stages)
-            }
-            runStep(sysrootMarkerFile(), installRootDir(Language.CPP), stateFlow, stages) {
-                RemoteToolchainInstaller(
-                    downloadUrl = AndroidRepositoryResolver().resolveLatestNdkLinuxUrl(), downloader = downloader,
-                    extractor = FilteredZipExtractor.ndkSysrootOnly(), progressListener = progress, stageListener = stages,
-                )
             }
             runStep(mainBinaryFile(Language.JAVA), installRootDir(Language.JAVA), stateFlow, stages) {
                 JdkInstaller(downloader = downloader, progressListener = progress, stageListener = stages)
