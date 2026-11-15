@@ -4,8 +4,10 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -17,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -28,6 +31,7 @@ fun ConnectorSettingsSection() {
     var endpoint by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
     var deviceId by remember { mutableStateOf("qtcm-android-device") }
+    var allowChanges by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("Ainda não ligado") }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -62,13 +66,14 @@ fun ConnectorSettingsSection() {
                 label = { Text("Device ID") },
                 singleLine = true,
             )
-            Text(message, style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {\n                Checkbox(checked = allowChanges, onCheckedChange = { allowChanges = it })\n                Text("Permitir à IA editar ficheiros e iniciar builds")\n            }\n            Text("Desativado por padrão: a IA só pode consultar projetos.", style = MaterialTheme.typography.bodySmall)\n            Text(message, style = MaterialTheme.typography.bodySmall)
             Button(
                 onClick = {
                     val intent = Intent(context, QtcmConnectorService::class.java).apply {
                         putExtra(QtcmConnectorService.EXTRA_ENDPOINT, endpoint.trim())
                         putExtra(QtcmConnectorService.EXTRA_TOKEN, token.trim())
                         putExtra(QtcmConnectorService.EXTRA_DEVICE_ID, deviceId.trim())
+                        putExtra(QtcmConnectorService.EXTRA_ALLOW_CHANGES, allowChanges)
                     }
                     ContextCompat.startForegroundService(context, intent)
                     token = ""
