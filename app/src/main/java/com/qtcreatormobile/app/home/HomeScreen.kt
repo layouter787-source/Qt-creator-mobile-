@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.qtcreatormobile.app.build.BuildUiState
+import com.qtcreatormobile.app.connector.ConnectorSettingsSection
 
 /**
  * Tela inicial do QT Creator Mobile: lista os projetos, permite criar o
@@ -41,6 +42,8 @@ fun HomeScreen(
     ) {
         Text("QT Creator Mobile", style = MaterialTheme.typography.headlineSmall)
         Text("Ambiente pronto para compilar.")
+
+        ConnectorSettingsSection()
 
         Button(onClick = onCreateSample, enabled = !state.running) {
             Text("Criar projeto de exemplo (C++)")
