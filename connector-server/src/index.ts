@@ -90,7 +90,8 @@ const server = createServer(async (request, response) => {
 
 const agents = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
 server.on("upgrade", (request, socket, head) => {
-  if (request.url !== "/agent" || !safeEqual(bearer(request), deviceToken) ||\n      request.headers["x-qtcm-device"] !== deviceId) {
+  if (request.url !== "/agent" || !safeEqual(bearer(request), deviceToken) ||
+      request.headers["x-qtcm-device"] !== deviceId) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
     return;
