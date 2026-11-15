@@ -4,12 +4,14 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +32,7 @@ fun ConnectorSettingsSection() {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text("AI Connector", style = MaterialTheme.typography.titleLarge)
@@ -50,6 +52,7 @@ fun ConnectorSettingsSection() {
                 onValueChange = { token = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Device token") },
+                visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
             )
             OutlinedTextField(
