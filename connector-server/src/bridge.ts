@@ -12,7 +12,7 @@ export class DeviceBridge {
   private readonly pending = new Map<string, Pending>();
 
   attach(socket: WebSocket): void {
-    if (this.socket && this.socket.readyState === this.socket.OPEN) {
+    if (this.socket && this.socket.readyState === 1) {
       this.socket.close(4001, "A newer device session connected");
     }
     this.socket = socket;
