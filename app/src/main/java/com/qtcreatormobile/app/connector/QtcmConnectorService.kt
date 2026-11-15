@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 class QtcmConnectorService : Service() {
     private var socket: WebSocket? = null
     private var client: OkHttpClient? = null
+    private var allowRemoteChanges: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -37,6 +38,7 @@ class QtcmConnectorService : Service() {
         val endpoint = intent?.getStringExtra(EXTRA_ENDPOINT)?.trim()?.trimEnd('/')
         val token = intent?.getStringExtra(EXTRA_TOKEN)?.trim()
         val deviceId = intent?.getStringExtra(EXTRA_DEVICE_ID)?.trim().orEmpty()
+        allowRemoteChanges = intent?.getBooleanExtra(EXTRA_ALLOW_CHANGES, false) ?: false
         if (endpoint.isNullOrBlank() || !endpoint.startsWith("wss://") ||
             token.isNullOrBlank() || token.length < 32 || deviceId.isBlank()
         ) {
@@ -88,8 +90,8 @@ class QtcmConnectorService : Service() {
         val result: Any = when (message.optString("command")) {
             "list_projects" -> listProjects()
             "read_file" -> readProjectFile(payload)
-            "write_file" -> writeProjectFile(payload)
-            "build_project" -> buildProject(payload)
+            "write_file" -> { require(allowRemoteChanges) { "Edição remota desativada nas definições do dispositivo" }; writeProjectFile(payload) }
+            "build_project" -> { require(allowRemoteChanges) { "Build remoto desativado nas definições do dispositivo" }; buildProject(payload) }
             else -> error("Comando não permitido")
         }
         return JSONObject().put("type", "result").put("id", id)
@@ -211,6 +213,7 @@ class QtcmConnectorService : Service() {
         const val EXTRA_ENDPOINT = "endpoint"
         const val EXTRA_TOKEN = "token"
         const val EXTRA_DEVICE_ID = "device_id"
+        const val EXTRA_ALLOW_CHANGES = "allow_remote_changes"
         private const val CHANNEL_ID = "qtcm_ai_connector"
         private const val NOTIFICATION_ID = 4307
         private const val MAX_TEXT_BYTES = 200_000
