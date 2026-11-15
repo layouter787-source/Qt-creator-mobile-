@@ -1,0 +1,49 @@
+name: AI Connector - Validate
+
+on:
+  push:
+    branches:
+      - feature/ai-connector-foundation
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android compile and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Run unit tests
+        run: gradle :project-model:test :build-engine:test --no-daemon --console=plain
+      - name: Assemble Android debug APK
+        run: gradle :app:assembleDebug --no-daemon --console=plain
+
+  cloud-connector:
+    name: TypeScript validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: connector-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: connector-server/package-lock.json
+      - name: Install dependencies
+        run: npm install
+      - name: Type-check MCP server
+        run: npm run check
