@@ -45,7 +45,7 @@ class QtcmConnectorService : Service() {
         }
         startForeground(NOTIFICATION_ID, notification("A ligar à cloud…"))
         connect(endpoint, token, deviceId)
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun connect(endpoint: String, token: String, deviceId: String) {
