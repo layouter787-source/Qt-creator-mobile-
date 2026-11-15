@@ -66,7 +66,12 @@ fun ConnectorSettingsSection() {
                 label = { Text("Device ID") },
                 singleLine = true,
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {\n                Checkbox(checked = allowChanges, onCheckedChange = { allowChanges = it })\n                Text("Permitir à IA editar ficheiros e iniciar builds")\n            }\n            Text("Desativado por padrão: a IA só pode consultar projetos.", style = MaterialTheme.typography.bodySmall)\n            Text(message, style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = allowChanges, onCheckedChange = { allowChanges = it })
+                Text("Permitir à IA editar ficheiros e iniciar builds")
+            }
+            Text("Desativado por padrão: a IA só pode consultar projetos.", style = MaterialTheme.typography.bodySmall)
+            Text(message, style = MaterialTheme.typography.bodySmall)
             Button(
                 onClick = {
                     val intent = Intent(context, QtcmConnectorService::class.java).apply {
