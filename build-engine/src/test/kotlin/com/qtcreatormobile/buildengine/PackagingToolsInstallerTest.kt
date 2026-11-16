@@ -53,7 +53,7 @@ class PackagingToolsInstallerTest {
     """.trimIndent()
 
     @Test
-    fun `installs aapt2, the two jars and android jar all under the same root`() {
+    fun `installs the two jars and android jar under the packaging root`() {
         val buildToolsZip = zipBytes(
             "android-15/lib/d8.jar" to "d8 bytes",
             "android-15/lib/apksigner.jar" to "signer bytes",
@@ -63,7 +63,6 @@ class PackagingToolsInstallerTest {
         val downloader = object : Downloader {
             override fun download(url: String, destination: File, listener: DownloadProgressListener) {
                 val bytes = when {
-                    url == PackagingToolsInstaller.AAPT2_DOWNLOAD_URL -> "fake aapt2 native binary".toByteArray()
                     url.endsWith("build-tools.zip") -> buildToolsZip
                     url.endsWith("platform.zip") -> platformZip
                     else -> error("URL inesperada no teste: $url")
@@ -81,11 +80,50 @@ class PackagingToolsInstallerTest {
 
         installer.install(installRoot)
 
-        assertEquals("fake aapt2 native binary", File(installRoot, PackagingLayout.AAPT2_BINARY).readText())
         assertEquals("d8 bytes", File(installRoot, PackagingLayout.D8_JAR).readText())
         assertEquals("signer bytes", File(installRoot, PackagingLayout.APKSIGNER_JAR).readText())
         assertEquals("framework bytes", File(installRoot, PackagingLayout.ANDROID_JAR).readText())
-        assertTrue(File(installRoot, PackagingLayout.AAPT2_BINARY).canExecute())
+    }
+}
+
+class Aapt2TermuxInstallerTest {
+
+    private lateinit var tempDir: File
+
+    @BeforeTest
+    fun setUp() {
+        tempDir = Files.createTempDirectory("qtcm-aapt2-test").toFile()
+    }
+
+    @AfterTest
+    fun tearDown() {
+        tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun `links packaging bin aapt2 to the termux binary`() {
+        val termuxRoot = File(tempDir, "cpp")
+        val packaging = File(tempDir, "packaging")
+        val fakeTermux = object : ToolchainInstaller {
+            override fun install(installRootDir: File) {
+                File(installRootDir, "usr/bin").mkdirs()
+                File(installRootDir, "usr/bin/aapt2").writeText("termux aapt2")
+            }
+        }
+
+        Aapt2TermuxInstaller(termuxRoot, fakeTermux).install(packaging)
+
+        val link = File(packaging, PackagingLayout.AAPT2_BINARY)
+        assertEquals("termux aapt2", link.readText())
+        assertTrue(Files.isSymbolicLink(link.toPath()))
+        assertTrue(link.canExecute())
+    }
+
+    @Test
+    fun `fails clearly when the termux package does not provide aapt2`() {
+        val installer = Aapt2TermuxInstaller(File(tempDir, "cpp"), object : ToolchainInstaller { override fun install(installRootDir: File) = Unit })
+        val error = kotlin.test.assertFailsWith<BuildEngineException> { installer.install(File(tempDir, "packaging")) }
+        assertTrue(error.message!!.contains("aapt2"))
     }
 }
 

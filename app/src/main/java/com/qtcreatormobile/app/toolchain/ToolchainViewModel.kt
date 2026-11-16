@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.qtcreatormobile.buildengine.Aapt2TermuxInstaller
 import com.qtcreatormobile.buildengine.CachingToolchainProvisioner
 import com.qtcreatormobile.buildengine.DownloadControl
 import com.qtcreatormobile.buildengine.DownloadPausedException
@@ -122,6 +123,19 @@ class ToolchainViewModel(application: Application) : AndroidViewModel(applicatio
             }
             runStep(mainBinaryFile(Language.JAVA), installRootDir(Language.JAVA), stateFlow, stages) {
                 JdkInstaller(downloader = downloader, progressListener = progress, stageListener = stages)
+            }
+            // aapt2 nativo: pacote do Termux (o antigo link direto do ReVanced Manager deu HTTP 404).
+            runStep(File(packagingDir, PackagingLayout.AAPT2_BINARY), packagingDir, stateFlow, stages) {
+                Aapt2TermuxInstaller(
+                    termuxRoot = installRootDir(Language.CPP),
+                    termuxInstaller = TermuxToolchainInstaller(
+                        rootPackage = "aapt2",
+                        downloader = downloader,
+                        prefixAlias = prefixAlias,
+                        progressListener = progress,
+                        stageListener = stages,
+                    ),
+                )
             }
             runStep(File(packagingDir, PackagingLayout.ANDROID_JAR), packagingDir, stateFlow, stages) {
                 PackagingToolsInstaller(downloader = downloader, progressListener = progress, stageListener = stages)
