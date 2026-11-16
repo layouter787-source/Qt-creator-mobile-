@@ -49,3 +49,30 @@ class SingleFileInstaller(
         destination.setExecutable(true)
     }
 }
+
+/**
+ * Instala o `aapt2` nativo (arm64) a partir do pacote `aapt2` do repositorio do Termux - o mesmo
+ * mecanismo (fechamento de dependencias, patch de prefixo) usado para o clang, porque o aapt2
+ * depende de libprotobuf, abseil etc. O link `<packaging>/bin/aapt2` aponta para o binario no
+ * `usr` do Termux ([termuxRoot]), de modo que o resto do app continua achando o aapt2 no mesmo lugar.
+ *
+ * O link anterior de download direto (ReVanced Manager) saiu do ar com HTTP 404.
+ */
+class Aapt2TermuxInstaller(
+    private val termuxRoot: File,
+    private val termuxInstaller: ToolchainInstaller,
+) : ToolchainInstaller {
+
+    override fun install(installRootDir: File) {
+        termuxInstaller.install(termuxRoot)
+        val real = File(termuxRoot, "usr/bin/aapt2")
+        if (!real.isFile) {
+            throw BuildEngineException("O pacote aapt2 do Termux foi instalado, mas ${real.path} nao existe.")
+        }
+        real.setExecutable(true)
+        val link = File(installRootDir, PackagingLayout.AAPT2_BINARY)
+        link.parentFile?.mkdirs()
+        java.nio.file.Files.deleteIfExists(link.toPath())
+        java.nio.file.Files.createSymbolicLink(link.toPath(), real.toPath())
+    }
+}

@@ -3,10 +3,10 @@ package com.qtcreatormobile.buildengine
 import java.io.File
 
 /**
- * Instala tudo que o Packaging precisa (menos o JDK, que fica em [JdkInstaller]):
- * `aapt2` nativo, `d8.jar`/`apksigner.jar` (de dentro do build-tools oficial) e
- * `android.jar` (da plataforma oficial). Cada fonte tem formato e origem
- * diferentes, mas tudo cai no mesmo `installRootDir` (`toolchain/packaging`).
+ * Instala o que o Packaging precisa do repositorio oficial do Android (menos o JDK, que fica em
+ * [JdkInstaller], e o `aapt2` nativo, que vem do Termux via [Aapt2TermuxInstaller]):
+ * `d8.jar`/`apksigner.jar` (de dentro do build-tools) e `android.jar` (da plataforma).
+ * Tudo cai no mesmo `installRootDir` (`toolchain/packaging`).
  */
 class PackagingToolsInstaller(
     private val platformApiLevel: Int = 34,
@@ -16,17 +16,10 @@ class PackagingToolsInstaller(
     private val stageListener: ToolchainStageListener = ToolchainStageListener {},
 ) : ToolchainInstaller {
 
-    companion object {
-        // .so nativo real arm64-v8a do aapt2, distribuido pelo ReVanced Manager (app real, milhoes de usuarios).
-        const val AAPT2_DOWNLOAD_URL =
-            "https://github.com/revanced/revanced-manager/raw/main/android/app/src/main/jniLibs/arm64-v8a/libaapt2.so"
-    }
-
     override fun install(installRootDir: File) {
         stageListener.onStageChanged(ToolchainStage.DOWNLOADING)
 
         val steps = listOf<Pair<String, () -> Unit>>(
-            "aapt2" to { installAapt2(installRootDir) },
             "build-tools" to {
                 downloadAndExtract(repositoryResolver.resolveLatestBuildToolsUrl(), FilteredZipExtractor.buildToolsJarsOnly(), installRootDir)
             },
@@ -39,11 +32,6 @@ class PackagingToolsInstaller(
             action()
             progressListener.onProgress(DownloadProgress((index + 1).toLong(), steps.size.toLong()))
         }
-    }
-
-    private fun installAapt2(installRootDir: File) {
-        val binDir = File(installRootDir, "bin")
-        SingleFileInstaller(AAPT2_DOWNLOAD_URL, "aapt2", downloader).install(binDir)
     }
 
     private fun downloadAndExtract(url: String, extractor: ArchiveExtractor, installRootDir: File) {
