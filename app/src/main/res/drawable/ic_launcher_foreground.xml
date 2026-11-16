@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icone do QT Creator Mobile (camada da frente do icone adaptativo). A arte (1254x1254) e
+     reduzida para caber na zona segura de 72dp do icone adaptativo de 108dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="16"
+        android:translateY="16"
+        android:scaleX="0.060606"
+        android:scaleY="0.060606">
+
+        <!-- Placa escura arredondada -->
+        <path android:pathData="M240,70H1014A170,170 0 0 1 1184,240V1014A170,170 0 0 1 1014,1184H240A170,170 0 0 1 70,1014V240A170,170 0 0 1 240,70Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="70" android:startY="70"
+                    android:endX="1184" android:endY="1184">
+                    <item android:offset="0" android:color="#FF1B1C23" />
+                    <item android:offset="1" android:color="#FF0B0B0F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Faixas diagonais dos cantos (recortadas pela placa) -->
+        <group>
+            <clip-path android:pathData="M240,70H1014A170,170 0 0 1 1184,240V1014A170,170 0 0 1 1014,1184H240A170,170 0 0 1 70,1014V240A170,170 0 0 1 240,70Z" />
+            <path android:fillColor="#FF35C84A" android:pathData="M0,0H372L0,372Z" />
+            <path android:fillColor="#FFE9E9EE" android:pathData="M372,0H455L0,455V372Z" />
+            <path android:fillColor="#FF35C84A" android:pathData="M1254,1254H882L1254,882Z" />
+            <path android:fillColor="#FFE9E9EE" android:pathData="M882,1254H799L1254,799V882Z" />
+        </group>
+
+        <!-- Contorno da placa -->
+        <path
+            android:pathData="M240,73H1014A167,167 0 0 1 1181,240V1014A167,167 0 0 1 1014,1181H240A167,167 0 0 1 73,1014V240A167,167 0 0 1 240,73Z"
+            android:strokeColor="#FF4A4C58"
+            android:strokeWidth="6" />
+
+        <!-- Colchetes de codigo < > -->
+        <path
+            android:pathData="M255,478L140,603L240,728M1050,540L1125,605L1040,715"
+            android:strokeColor="#FF6E707C"
+            android:strokeWidth="46" />
+
+        <!-- Lateral clara do cartao verde -->
+        <path android:fillColor="#FF6EE04A" android:pathData="M968,320L1028,385L1000,740L975,790L990,760Z" />
+
+        <!-- Cartao verde -->
+        <path android:pathData="M262,885L318,445L440,345L930,296L968,320L990,760L890,860L290,905Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="radial"
+                    android:centerX="620" android:centerY="610"
+                    android:gradientRadius="430">
+                    <item android:offset="0" android:color="#FF00391C" />
+                    <item android:offset="0.55" android:color="#FF0A7B3B" />
+                    <item android:offset="1" android:color="#FF43D44F" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Letra Q (anel + cauda) -->
+        <path
+            android:fillColor="#FFF5F5F9"
+            android:fillType="evenOdd"
+            android:pathData="M546,415C651,415 735,505 735,620C735,735 651,825 546,825C441,825 357,735 357,620C357,505 441,415 546,415ZM546,482C482,482 433,540 433,620C433,700 482,758 546,758C610,758 657,700 657,620C657,540 610,482 546,482Z" />
+        <path android:fillColor="#FFF5F5F9" android:pathData="M528,625H580L750,808H665Z" />
+
+        <!-- Letra t -->
+        <path
+            android:fillColor="#FFF5F5F9"
+            android:pathData="M790,423H858V493H920V553H858V690Q858,710 880,710H925V775H870Q790,775 790,690Z" />
+    </group>
+</vector>
