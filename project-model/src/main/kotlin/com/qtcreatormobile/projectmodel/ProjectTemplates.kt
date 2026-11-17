@@ -157,56 +157,66 @@ object ProjectTemplates {
         }
     """.trimIndent() + "\n"
 
-    private fun javaActivity(packageName: String, native: Boolean): String {
-        val loader = if (native) "    static {\n        System.loadLibrary(\"app\");\n    }\n\n    private native String nativeGreeting();\n\n" else ""
+    private fun javaActivity(packageName: String, native: Boolean): String = buildString {
         val text = if (native) "nativeGreeting()" else "\"Ola do Java!\""
-        return """
-            package $packageName;
-
-            import android.app.Activity;
-            import android.os.Bundle;
-            import android.view.Gravity;
-            import android.widget.TextView;
-
-            public class MainActivity extends Activity {
-            $loader    @Override
-                protected void onCreate(Bundle savedInstanceState) {
-                    super.onCreate(savedInstanceState);
-                    TextView view = new TextView(this);
-                    view.setText($text);
-                    view.setTextSize(22f);
-                    view.setGravity(Gravity.CENTER);
-                    setContentView(view);
-                }
-            }
-        """.trimIndent() + "\n"
+        appendLine("package $packageName;")
+        appendLine()
+        appendLine("import android.app.Activity;")
+        appendLine("import android.os.Bundle;")
+        appendLine("import android.view.Gravity;")
+        appendLine("import android.widget.TextView;")
+        appendLine()
+        appendLine("public class MainActivity extends Activity {")
+        if (native) {
+            appendLine("    static {")
+            appendLine("        System.loadLibrary(\"app\");")
+            appendLine("    }")
+            appendLine()
+            appendLine("    private native String nativeGreeting();")
+            appendLine()
+        }
+        appendLine("    @Override")
+        appendLine("    protected void onCreate(Bundle savedInstanceState) {")
+        appendLine("        super.onCreate(savedInstanceState);")
+        appendLine("        TextView view = new TextView(this);")
+        appendLine("        view.setText($text);")
+        appendLine("        view.setTextSize(22f);")
+        appendLine("        view.setGravity(Gravity.CENTER);")
+        appendLine("        setContentView(view);")
+        appendLine("    }")
+        appendLine("}")
     }
 
-    private fun kotlinActivity(packageName: String, native: Boolean, useJavaHelper: Boolean): String {
-        val nativeMembers = if (native) {
-            "    external fun nativeGreeting(): String\n\n    companion object {\n        init {\n            System.loadLibrary(\"app\")\n        }\n    }\n\n"
-        } else ""
+    private fun kotlinActivity(packageName: String, native: Boolean, useJavaHelper: Boolean): String = buildString {
         val base = if (native) "nativeGreeting()" else "\"Ola do Kotlin!\""
         val text = if (useJavaHelper) "Greeter.decorate($base)" else base
-        return """
-            package $packageName
-
-            import android.app.Activity
-            import android.os.Bundle
-            import android.view.Gravity
-            import android.widget.TextView
-
-            class MainActivity : Activity() {
-            $nativeMembers    override fun onCreate(savedInstanceState: Bundle?) {
-                    super.onCreate(savedInstanceState)
-                    val view = TextView(this)
-                    view.text = $text
-                    view.textSize = 22f
-                    view.gravity = Gravity.CENTER
-                    setContentView(view)
-                }
-            }
-        """.trimIndent() + "\n"
+        appendLine("package $packageName")
+        appendLine()
+        appendLine("import android.app.Activity")
+        appendLine("import android.os.Bundle")
+        appendLine("import android.view.Gravity")
+        appendLine("import android.widget.TextView")
+        appendLine()
+        appendLine("class MainActivity : Activity() {")
+        if (native) {
+            appendLine("    external fun nativeGreeting(): String")
+            appendLine()
+            appendLine("    companion object {")
+            appendLine("        init {")
+            appendLine("            System.loadLibrary(\"app\")")
+            appendLine("        }")
+            appendLine("    }")
+            appendLine()
+        }
+        appendLine("    override fun onCreate(savedInstanceState: Bundle?) {")
+        appendLine("        super.onCreate(savedInstanceState)")
+        appendLine("        val view = TextView(this)")
+        appendLine("        view.text = $text")
+        appendLine("        view.textSize = 22f")
+        appendLine("        view.gravity = Gravity.CENTER")
+        appendLine("        setContentView(view)")
+        appendLine("    }")
+        appendLine("}")
     }
 
     private fun greeterJava(packageName: String): String = """
