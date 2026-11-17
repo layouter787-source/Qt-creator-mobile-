@@ -18,3 +18,4 @@ rootProject.name = "QTCreatorMobile"
 include(":app")
 include(":project-model")
 include(":build-engine")
+include(":ai-client")

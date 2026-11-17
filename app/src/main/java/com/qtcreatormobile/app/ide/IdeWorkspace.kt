@@ -1,5 +1,6 @@
 package com.qtcreatormobile.app.ide
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -56,6 +57,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.qtcreatormobile.app.ai.AiChatScreen
+import com.qtcreatormobile.app.ai.AiViewModel
 import com.qtcreatormobile.projectmodel.ProjectFiles
 import kotlinx.coroutines.delay
 import java.io.File
@@ -77,6 +81,8 @@ fun IdeWorkspace(viewModel: IdeViewModel, state: IdeUiState, settings: EditorSet
     var menuOpen by remember { mutableStateOf(false) }
     var findOpen by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<TreeDialog?>(null) }
+    var aiOpen by remember { mutableStateOf(false) }
+    val aiViewModel: AiViewModel = viewModel()
     var historyTick by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
 
@@ -204,6 +210,7 @@ fun IdeWorkspace(viewModel: IdeViewModel, state: IdeUiState, settings: EditorSet
                     ToolItem("Buscar", panel == Panel.SEARCH) {
                         if (panel == Panel.SEARCH) panel = Panel.NONE else { viewModel.loadFileIndex(); panel = Panel.SEARCH }
                     }
+                    ToolItem("IA", aiOpen) { aiOpen = true }
                     ToolItem("Build", panel == Panel.BUILD) { panel = if (panel == Panel.BUILD) Panel.NONE else Panel.BUILD }
                     ToolItem("Ajustes", false) { onSettings() }
                 }
@@ -227,6 +234,19 @@ fun IdeWorkspace(viewModel: IdeViewModel, state: IdeUiState, settings: EditorSet
                     }
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color(0x66000000)).clickable { panel = Panel.NONE })
                 }
+            }
+
+            // ----- assistente de IA (sobre o editor, que continua montado) -----
+            if (aiOpen) {
+                BackHandler { aiOpen = false }
+                AiChatScreen(
+                    viewModel = aiViewModel,
+                    fileName = state.activeFile?.name,
+                    fileText = { state.activeFile?.let { viewModel.currentText(it) } },
+                    onInsert = { handle.insert(it) },
+                    onReplaceFile = { code -> handle.editor?.setText(code) },
+                    onClose = { aiOpen = false },
+                )
             }
         }
     }
