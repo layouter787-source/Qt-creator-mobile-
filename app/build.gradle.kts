@@ -99,6 +99,7 @@ android {
 
 dependencies {
     implementation(project(":build-engine"))
+    implementation(project(":ai-client"))
 
     // Sora Editor 0.23.6 mantém os pacotes io.github.rosemoe.sora usados pelo wrapper atual.
     implementation(platform("io.github.Rosemoe.sora-editor:bom:0.23.6"))
