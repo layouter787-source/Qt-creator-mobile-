@@ -38,6 +38,10 @@ class RealProcessRunner : EnvironmentProcessRunner {
 
     override fun run(command: List<String>, workingDir: File, env: Map<String, String>): ProcessResult {
         val builder = ProcessBuilder(command).directory(workingDir)
+        // Desliga o "heap tagging" (MTE/TBI) do Android nos processos filhos: o JDK portado para
+        // Android guarda dados nos bits altos dos ponteiros e o libc aborta com "Pointer tag for
+        // 0x... was truncated" (visto no keytool). O chamador pode sobrescrever.
+        builder.environment()["MEMTAG_OPTIONS"] = "off"
         builder.environment().putAll(env)
 
         val process = try {
