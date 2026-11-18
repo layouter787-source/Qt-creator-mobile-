@@ -168,7 +168,7 @@ fun CodeEditorView(
     settings: EditorSettings,
     onChanged: () -> Unit,
     onJumped: () -> Unit,
-    onError: (String) -> Unit,
+    onError: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     AndroidView(
