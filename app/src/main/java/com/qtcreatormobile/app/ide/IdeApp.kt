@@ -15,6 +15,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
+import com.qtcreatormobile.app.ai.AiProvidersScreen
+import com.qtcreatormobile.app.ai.AiViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
 
 fun installApk(context: Context, apk: File) {
@@ -46,13 +49,23 @@ fun copyToClipboard(context: Context, label: String, text: String) {
     Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
 }
 
-/** Raiz da IDE: Home -> Workspace, com Configuracoes por cima. */
+/** Raiz da IDE: Home -> Workspace, com Configuracoes (hub e subtelas) por cima. */
 @Composable
-fun IdeApp(viewModel: IdeViewModel) {
+fun IdeApp(viewModel: IdeViewModel, restoreLast: Boolean = true) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.editor.collectAsStateWithLifecycle()
-    var showSettings by remember { mutableStateOf(false) }
+    val editorSettings by viewModel.settings.editor.collectAsStateWithLifecycle()
+    val appearance by viewModel.settings.appearance.collectAsStateWithLifecycle()
+    val keystoreViewModel: KeystoreViewModel = viewModel()
+    val aiViewModel: AiViewModel = viewModel()
+    val aiState by aiViewModel.state.collectAsStateWithLifecycle()
+    // Rota de configuracoes: null = fechado; "hub" = menu; demais = subtelas.
+    var route by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val store = KeystoreStore(context)
+        viewModel.signingProvider = { store.selectedSpec() }
+    }
 
     LaunchedEffect(state.notice) {
         state.notice?.let {
@@ -70,10 +83,20 @@ fun IdeApp(viewModel: IdeViewModel) {
         }
     }
 
+    val current = route
     when {
-        showSettings -> {
-            BackHandler { showSettings = false }
-            IdeSettingsScreen(settings = settings, onChange = viewModel.settings::update, onBack = { showSettings = false })
+        current != null -> {
+            val back: () -> Unit = { route = if (current == "hub") null else "hub" }
+            BackHandler(onBack = back)
+            when (current) {
+                "appearance" -> AppearanceScreen(appearance, viewModel.settings::updateAppearance, back)
+                "editor" -> EditorSettingsScreen(editorSettings, viewModel.settings::update, back)
+                "keystore" -> KeystoreScreen(keystoreViewModel, back)
+                "ai" -> AiProvidersScreen(aiState, aiViewModel, back)
+                "logs" -> LogsScreen((state.build as? BuildPanelState.Done)?.outcome?.fullLog, back)
+                "about" -> AboutScreen(back)
+                else -> SettingsHub(onNavigate = { route = it }, onBack = { route = null })
+            }
         }
         state.project == null -> IdeHomeScreen(
             state = state,
@@ -81,11 +104,11 @@ fun IdeApp(viewModel: IdeViewModel) {
             onDelete = viewModel::deleteProject,
             onCreate = viewModel::createProject,
             suggestPackage = viewModel::suggestPackage,
-            onSettings = { showSettings = true },
+            onSettings = { route = "hub" },
         )
         else -> {
             BackHandler { viewModel.closeProject() }
-            IdeWorkspace(viewModel = viewModel, state = state, settings = settings, onSettings = { showSettings = true })
+            IdeWorkspace(viewModel = viewModel, state = state, settings = editorSettings, onSettings = { route = "hub" })
         }
     }
 }
